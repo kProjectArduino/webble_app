@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BLE LED Controller</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      gap: 16px;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 24px;
+      width: 300px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      margin: 8px 0;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    button:active { opacity: 0.8; }
+    .btn-connect { background: #3b82f6; color: white; }
+    .btn-disconnect { background: #ef4444; color: white; display: none; }
+    .btn-on { background: #10b981; color: white; }
+    .btn-off { background: #64748b; color: white; }
+    #status { margin-top: 12px; font-size: 13px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>LED Controller</h2>
+    <button id="btnConnect" class="btn-connect" onclick="connectBLE()">기기 검색 및 연결</button>
+    <button id="btnDisconnect" class="btn-disconnect" onclick="disconnectBLE()">연결 해제</button>
+    
+    <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 16px 0;">
+    
+    <button class="btn-on" onclick="sendData('1')">LED ON</button>
+    <button class="btn-off" onclick="sendData('0')">LED OFF</button>
+    
+    <div id="status">상태: 연결 대기 중</div>
+  </div>
+
+  <script>
+    // 128비트 표준 GATT UUID 형식
+    const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
+    const CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
+
+    let bleDevice = null;
+    let bleCharacteristic = null;
+
+    const statusText = document.getElementById('status');
+    const btnConnect = document.getElementById('btnConnect');
+    const btnDisconnect = document.getElementById('btnDisconnect');
+
+    async function connectBLE() {
+      try {
+        statusText.innerText = "상태: 기기 검색 중...";
+
+        // acceptAllDevices를 사용해 모든 주변 기기를 검색 목록에 표시
+        bleDevice = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [SERVICE_UUID]
+        });
+
+        bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+        statusText.innerText = "상태: GATT 서버 연결 중...";
+        const server = await bleDevice.gatt.connect();
+
+        statusText.innerText = "상태: 서비스 탐색 중...";
+        const service = await server.getPrimaryService(SERVICE_UUID);
+
+        statusText.innerText = "상태: 특성(Characteristic) 획득 중...";
+        bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+        statusText.innerText = `상태: ${bleDevice.name || '기기'} 연결 완료`;
+        statusText.style.color = "#10b981";
+        btnConnect.style.display = "none";
+        btnDisconnect.style.display = "block";
+
+      } catch (error) {
+        statusText.innerText = `오류: ${error.message}`;
+        statusText.style.color = "#ef4444";
+      }
+    }
+
+    function disconnectBLE() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        bleDevice.gatt.disconnect();
+      }
+    }
+
+    function onDisconnected() {
+      statusText.innerText = "상태: 연결 해제됨";
+      statusText.style.color = "#94a3b8";
+      btnConnect.style.display = "block";
+      btnDisconnect.style.display = "none";
+      bleCharacteristic = null;
+    }
+
+    async function sendData(val) {
+      if (!bleCharacteristic) {
+        alert("먼저 기기를 연결해주세요.");
+        return;
+      }
+
+      try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(val);
+
+        // 모듈 특성 속성에 맞춰 전송 방식 자동 분기
+        if (bleCharacteristic.properties.writeWithoutResponse) {
+          await bleCharacteristic.writeValueWithoutResponse(data);
+        } else {
+          await bleCharacteristic.writeValue(data);
+        }
+        statusText.innerText = `전송 성공: '${val}'`;
+      } catch (error) {
+        statusText.innerText = `전송 실패: ${error.message}`;
+      }
+    }
+  </script>
+</body>
+</html>
