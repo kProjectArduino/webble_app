@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mecanum Wheel Controller</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-red: #ef4444;
+      --accent-green: #10b981;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.12) 0px, transparent 50%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-main);
+    }
+
+    .controller-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px;
+      padding: 24px 20px;
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .title-group h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .title-group span {
+      font-size: 11px;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 6px 12px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--accent-red);
+      box-shadow: 0 0 8px var(--accent-red);
+      transition: background-color 0.3s, box-shadow 0.3s;
+    }
+
+    .dot.connected {
+      background-color: var(--accent-green);
+      box-shadow: 0 0 10px var(--accent-green);
+    }
+
+    /* 연결 버튼 */
+    .btn-connect {
+      width: 100%;
+      padding: 14px;
+      border-radius: 16px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-cyan) 100%);
+      color: white;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 6px 20px rgba(6, 182, 212, 0.3);
+      transition: all 0.2s;
+      margin-bottom: 20px;
+    }
+
+    .btn-connect:active {
+      transform: scale(0.98);
+      box-shadow: 0 2px 10px rgba(6, 182, 212, 0.2);
+    }
+
+    .btn-disconnect {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      box-shadow: none;
+      display: none;
+    }
+
+    /* 8방향 컨트롤 그리드 */
+    .pad-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      width: 100%;
+      margin-bottom: 16px;
+    }
+
+    .btn-pad {
+      aspect-ratio: 1 / 1;
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 18px;
+      color: #e2e8f0;
+      font-size: 22px;
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      cursor: pointer;
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      transition: all 0.1s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-pad span {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-sub);
+    }
+
+    .btn-pad.diagonal {
+      background: linear-gradient(145deg, #182234, #0b1220);
+      color: #94a3b8;
+    }
+
+    .btn-pad.center-stop {
+      background: rgba(15, 23, 42, 0.8);
+      border-color: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      font-size: 13px;
+      letter-spacing: 1px;
+      cursor: default;
+    }
+
+    .btn-pad:active:not(.center-stop) {
+      transform: translateY(3px) scale(0.96);
+      background: linear-gradient(145deg, var(--accent-blue), #2563eb);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.6), inset 0 2px 4px rgba(0, 0, 0, 0.3);
+      color: white;
+    }
+
+    .btn-pad:active:not(.center-stop) span {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    /* 회전 버튼 그룹 */
+    .rotate-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 100%;
+      margin-bottom: 16px;
+    }
+
+    .btn-rotate {
+      padding: 14px 10px;
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 16px;
+      color: #ddd6fe;
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      transition: all 0.1s ease;
+    }
+
+    .btn-rotate:active {
+      transform: translateY(2px) scale(0.97);
+      background: linear-gradient(145deg, var(--accent-purple), #7c3aed);
+      box-shadow: 0 0 16px rgba(139, 92, 246, 0.5);
+      color: #fff;
+    }
+
+    /* 터미널 로그 창 */
+    .terminal {
+      width: 100%;
+      background: rgba(10, 15, 29, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-sizing: border-box;
+      margin-bottom: 16px;
+    }
+
+    .terminal-dot {
+      width: 6px;
+      height: 6px;
+      background-color: #38bdf8;
+      border-radius: 50%;
+      animation: blink 1.2s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 1; }
+    }
+
+    .terminal-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 권장 브라우저 안내 박스 */
+    .guide-box {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background-color: rgba(10, 15, 29, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      text-align: left;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--text-sub);
+    }
+
+    .guide-title {
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+    }
+
+    .guide-item {
+      margin-bottom: 4px;
+    }
+
+    .guide-item:last-of-type {
+      margin-bottom: 0;
+    }
+
+    .guide-note {
+      color: #64748b;
+      font-size: 10.5px;
+      margin-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 6px;
+    }
+
+    .highlight {
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    .highlight-ios {
+      color: #f472b6;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="controller-card">
+    <div class="header">
+      <div class="title-group">
+        <h1>MECANUM CORE</h1>
+        <span>BLE Controller</span>
+      </div>
+      <div class="status-badge">
+        <div id="statusDot" class="dot"></div>
+        <span id="statusText">DISCONNECTED</span>
+      </div>
+    </div>
+
+    <button id="btnConnect" class="btn-connect" onclick="connectBLE()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+      기기 검색 및 연결
+    </button>
+    <button id="btnDisconnect" class="btn-connect btn-disconnect" onclick="disconnectBLE()">
+      연결 해제
+    </button>
+
+    <!-- 8방향 매트릭스 -->
+    <div class="pad-grid">
+      <button class="btn-pad diagonal" data-cmd="Q">↖<span>FL</span></button>
+      <button class="btn-pad" data-cmd="F">▲<span>FWD</span></button>
+      <button class="btn-pad diagonal" data-cmd="E">↗<span>FR</span></button>
+
+      <button class="btn-pad" data-cmd="L">◀<span>LEFT</span></button>
+      <div class="btn-pad center-stop">STOP</div>
+      <button class="btn-pad" data-cmd="R">▶<span>RIGHT</span></button>
+
+      <button class="btn-pad diagonal" data-cmd="Z">↙<span>BL</span></button>
+      <button class="btn-pad" data-cmd="B">▼<span>REV</span></button>
+      <button class="btn-pad diagonal" data-cmd="C">↘<span>BR</span></button>
+    </div>
+
+    <!-- 제자리 회전 -->
+    <div class="rotate-group">
+      <button class="btn-rotate" data-cmd="J">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        좌회전
+      </button>
+      <button class="btn-rotate" data-cmd="K">
+        우회전
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+      </button>
+    </div>
+
+    <!-- 콘솔 터미널 바 -->
+    <div class="terminal">
+      <div class="terminal-dot"></div>
+      <div id="logText" class="terminal-text">System ready. Waiting for connection...</div>
+    </div>
+
+    <!-- 권장 브라우저 안내 영역 -->
+    <div class="guide-box">
+      <div class="guide-title">ℹ️ 접속 환경별 권장 브라우저</div>
+      <div class="guide-item">• <span class="highlight">PC / 안드로이드</span>: <b>Google Chrome</b>, <b>Edge</b> 브라우저 사용</div>
+      <div class="guide-item">• <span class="highlight-ios">아이폰 / 아이패드(iOS)</span>: 기본 Safari/Chrome은 BLE를 미지원하므로 앱스토어에서 <b>Bluefy</b> 또는 <b>WebBLE</b> 전용 브라우저 설치 후 접속</div>
+      <div class="guide-note">* Web Bluetooth 보안 정책상 <b>HTTPS</b> 또는 <b>localhost</b> 주소에서만 동작합니다.</div>
+    </div>
+  </div>
+
+  <script>
+    const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
+    const CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
+
+    let bleDevice = null;
+    let bleCharacteristic = null;
+
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const btnConnect = document.getElementById('btnConnect');
+    const btnDisconnect = document.getElementById('btnDisconnect');
+    const logText = document.getElementById('logText');
+
+    function log(msg) {
+      logText.innerText = msg;
+    }
+
+    function triggerHaptic() {
+      if (navigator.vibrate) {
+        navigator.vibrate(15);
+      }
+    }
+
+    async function connectBLE() {
+      if (!navigator.bluetooth) {
+        alert("현재 브라우저는 Web Bluetooth를 지원하지 않습니다.\n안드로이드/PC는 Chrome, iOS는 Bluefy 앱을 사용해 주세요.");
+        return;
+      }
+
+      try {
+        log("BLE 기기 검색 중...");
+        bleDevice = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [SERVICE_UUID]
+        });
+
+        bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
+        log("GATT 서버 연결 시도...");
+        const server = await bleDevice.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+        statusDot.classList.add('connected');
+        statusText.innerText = bleDevice.name ? bleDevice.name.toUpperCase() : "ONLINE";
+        statusText.style.color = "var(--accent-green)";
+        btnConnect.style.display = "none";
+        btnDisconnect.style.display = "flex";
+
+        log(`연결 성공: ${bleDevice.name || 'Device'}`);
+        triggerHaptic();
+      } catch (error) {
+        log(`연결 실패: ${error.message}`);
+      }
+    }
+
+    function disconnectBLE() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        bleDevice.gatt.disconnect();
+      } else {
+        onDisconnected();
+      }
+    }
+
+    function onDisconnected() {
+      statusDot.classList.remove('connected');
+      statusText.innerText = "DISCONNECTED";
+      statusText.style.color = "var(--text-sub)";
+      btnConnect.style.display = "flex";
+      btnDisconnect.style.display = "none";
+      bleCharacteristic = null;
+      log("장치 연결이 종료되었습니다.");
+    }
+
+    async function sendCommand(cmd) {
+      if (!bleCharacteristic) return;
+      try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(cmd);
+
+        if (bleCharacteristic.properties.writeWithoutResponse) {
+          await bleCharacteristic.writeValueWithoutResponse(data);
+        } else {
+          await bleCharacteristic.writeValue(data);
+        }
+        log(`TX >> '${cmd}'`);
+      } catch (err) {
+        log(`TX Error: ${err.message}`);
+      }
+    }
+
+    // 컨트롤 버튼 이벤트 리스너 등록
+    document.querySelectorAll('[data-cmd]').forEach(btn => {
+      const cmd = btn.getAttribute('data-cmd');
+
+      const handlePress = (e) => {
+        e.preventDefault();
+        triggerHaptic();
+        sendCommand(cmd);
+      };
+
+      const handleRelease = (e) => {
+        e.preventDefault();
+        sendCommand('S');
+      };
+
+      btn.addEventListener('pointerdown', handlePress);
+      btn.addEventListener('pointerup', handleRelease);
+      btn.addEventListener('pointerleave', handleRelease);
+      btn.addEventListener('pointercancel', handleRelease);
+    });
+  </script>
+</body>
+</html>
