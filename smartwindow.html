@@ -4,21 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Smart Air & Window Hub</title>
+  
+  <!-- 프리미엄 한글 웹폰트: Pretendard -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+
   <style>
     :root {
       --bg-gradient: linear-gradient(145deg, #f0f4fd 0%, #e2ebf9 100%);
-      --card-bg: rgba(255, 255, 255, 0.88);
+      --card-bg: rgba(255, 255, 255, 0.9);
       --primary: #3b82f6;
       --primary-soft: #eff6ff;
-      --primary-border: #bfdbfe;
       --accent-sky: #0ea5e9;
       --accent-green: #10b981;
-      --accent-red: #f43f5e;
+      --accent-red: #ef4444;
       --accent-amber: #f59e0b;
-      --text-main: #1e293b;
+      --text-main: #0f172a;
       --text-sub: #64748b;
-      --text-light: #94a3b8;
-      --card-shadow: 0 16px 32px rgba(148, 163, 184, 0.2), 0 2px 6px rgba(148, 163, 184, 0.1);
+      --text-muted: #94a3b8;
+      --card-shadow: 0 16px 36px rgba(148, 163, 184, 0.18), 0 2px 6px rgba(148, 163, 184, 0.08);
     }
 
     * {
@@ -32,7 +35,7 @@
     body {
       margin: 0;
       padding: 24px 16px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
       background: var(--bg-gradient);
       min-height: 100vh;
       display: flex;
@@ -40,13 +43,14 @@
       align-items: center;
       justify-content: center;
       color: var(--text-main);
+      letter-spacing: -0.3px;
     }
 
     .controller-card {
       background: var(--card-bg);
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
-      border: 1px solid rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.85);
       border-radius: 32px;
       padding: 26px 22px;
       width: 100%;
@@ -69,7 +73,7 @@
       margin: 0;
       font-size: 19px;
       font-weight: 800;
-      letter-spacing: -0.5px;
+      letter-spacing: -0.6px;
       color: #0f172a;
     }
 
@@ -89,7 +93,7 @@
       padding: 6px 12px;
       border-radius: 20px;
       border: 1px solid #e2e8f0;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--text-sub);
     }
@@ -99,7 +103,7 @@
       height: 8px;
       border-radius: 50%;
       background-color: var(--accent-red);
-      box-shadow: 0 0 6px rgba(244, 63, 94, 0.4);
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
       transition: all 0.3s;
     }
 
@@ -116,8 +120,9 @@
       border: none;
       background: linear-gradient(135deg, #3b82f6 0%, #0284c7 100%);
       color: white;
-      font-size: 14px;
+      font-size: 14.5px;
       font-weight: 700;
+      font-family: inherit;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -144,7 +149,7 @@
     /* 그래픽 창문 뷰어 */
     .window-visualizer {
       width: 100%;
-      height: 150px;
+      height: 145px;
       background: linear-gradient(180deg, #bae6fd 0%, #e0f2fe 70%, #f0fdf4 100%);
       border-radius: 20px;
       border: 4px solid #cbd5e1;
@@ -155,7 +160,6 @@
       margin-bottom: 14px;
     }
 
-    /* 바깥 풍경 (해/구름) */
     .scenery {
       position: absolute;
       top: 14px;
@@ -165,7 +169,6 @@
       transition: all 0.5s;
     }
 
-    /* 창문 패널 */
     .window-pane {
       width: 50%;
       height: 100%;
@@ -174,9 +177,6 @@
       border: 3px solid #94a3b8;
       position: relative;
       transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     .pane-left {
@@ -189,47 +189,33 @@
       transform-origin: right;
     }
 
-    /* 창살 디테일 */
     .pane-grid {
       position: absolute;
+      top: 50%;
       width: 100%;
       height: 1px;
       background: rgba(148, 163, 184, 0.6);
     }
 
-    /* 열림/닫힘 상태별 패널 이동 */
-    .window-visualizer.open .pane-left {
-      transform: translateX(-75%);
-    }
-    .window-visualizer.open .pane-right {
-      transform: translateX(75%);
-    }
-
-    .window-visualizer.moving .window-pane {
-      animation: pulse 1s infinite alternate;
-    }
-
-    @keyframes pulse {
-      0% { opacity: 0.8; }
-      100% { opacity: 0.4; }
-    }
+    .window-visualizer.open .pane-left { transform: translateX(-75%); }
+    .window-visualizer.open .pane-right { transform: translateX(75%); }
 
     .window-status-pill {
       position: absolute;
       bottom: 8px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(15, 23, 42, 0.75);
+      background: rgba(15, 23, 42, 0.8);
       color: white;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 11px;
+      padding: 5px 14px;
+      border-radius: 14px;
+      font-size: 11.5px;
       font-weight: 700;
-      letter-spacing: 0.5px;
+      letter-spacing: -0.2px;
       backdrop-filter: blur(4px);
     }
 
-    /* 센서 그리드 */
+    /* 센서 그리드 (상태 강조 레이아웃) */
     .sensor-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -241,11 +227,11 @@
     .sensor-card {
       background: #ffffff;
       border: 1px solid #edf2f7;
-      border-radius: 16px;
-      padding: 12px;
+      border-radius: 18px;
+      padding: 13px 12px;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 3px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
     }
 
@@ -258,17 +244,22 @@
       align-items: center;
     }
 
-    .sensor-value {
-      font-size: 18px;
+    /* 크고 굵게 강조된 상태 텍스트 */
+    .sensor-status-main {
+      font-size: 15px;
       font-weight: 800;
       color: #0f172a;
-      font-family: ui-monospace, Menlo, monospace;
+      letter-spacing: -0.4px;
+      margin-top: 2px;
+      line-height: 1.3;
     }
 
-    .sensor-sub {
-      font-size: 10.5px;
-      font-weight: 600;
-      color: var(--text-light);
+    /* 작고 은은한 수치 텍스트 */
+    .sensor-value-sub {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      font-family: ui-monospace, Menlo, Consolas, monospace;
     }
 
     .alert-text {
@@ -293,8 +284,9 @@
       border-radius: 12px;
       background: transparent;
       color: var(--text-sub);
-      font-size: 12.5px;
+      font-size: 13px;
       font-weight: 700;
+      font-family: inherit;
       cursor: pointer;
       transition: all 0.2s;
     }
@@ -305,7 +297,7 @@
       box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
     }
 
-    /* 수동 동작 제어 버튼 그룹 */
+    /* 수동 동작 버튼 */
     .manual-actions {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -320,8 +312,9 @@
       border: 1px solid #e2e8f0;
       border-radius: 16px;
       color: #334155;
-      font-size: 12.5px;
+      font-size: 13px;
       font-weight: 700;
+      font-family: inherit;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -332,9 +325,7 @@
       transition: all 0.15s ease;
     }
 
-    .btn-action svg {
-      stroke-width: 2.2;
-    }
+    .btn-action svg { stroke-width: 2.2; }
 
     .btn-action:active {
       transform: translateY(2px) scale(0.97);
@@ -349,11 +340,9 @@
       border-color: #fee2e2;
     }
 
-    .btn-action.stop-action:active {
-      background: #fecaca;
-    }
+    .btn-action.stop-action:active { background: #fecaca; }
 
-    /* 로그 바 */
+    /* 로그 터미널 */
     .terminal {
       width: 100%;
       background: #f8fafc;
@@ -384,7 +373,7 @@
 
     .guide-box {
       width: 100%;
-      padding: 11px 13px;
+      padding: 12px 14px;
       border-radius: 14px;
       background-color: #f1f5f9;
       border: 1px solid #e2e8f0;
@@ -431,27 +420,34 @@
       <div id="windowStateBadge" class="window-status-pill">닫힘 (대기)</div>
     </div>
 
-    <!-- 실시간 센서 카드 그리드 -->
+    <!-- 실시간 센서 카드 그리드 (상태 중심 UI) -->
     <div class="sensor-grid">
+      <!-- 실내 환경 (온습도) -->
       <div class="sensor-card">
-        <div class="sensor-label">온도 / 습도 <span>🌡️</span></div>
-        <div class="sensor-value"><span id="valTemp">--</span>°C / <span id="valHumi">--</span>%</div>
-        <div class="sensor-sub" id="tempStatus">측정 대기</div>
+        <div class="sensor-label">실내 공기 <span>🌡️</span></div>
+        <div class="sensor-status-main" id="tempStatus">측정 대기</div>
+        <div class="sensor-value-sub"><span id="valTemp">--</span>°C / <span id="valHumi">--</span>%</div>
       </div>
+
+      <!-- 빗물 감지 -->
       <div class="sensor-card">
-        <div class="sensor-label">빗물 감지 <span>🌧️</span></div>
-        <div class="sensor-value" id="valRain">--</div>
-        <div class="sensor-sub" id="rainStatus">측정 대기</div>
+        <div class="sensor-label">날씨 / 강수 <span>🌧️</span></div>
+        <div class="sensor-status-main" id="rainStatus">측정 대기</div>
+        <div class="sensor-value-sub">센서값: <span id="valRain">--</span></div>
       </div>
+
+      <!-- 가스 감지 -->
       <div class="sensor-card">
-        <div class="sensor-label">가스 감지 <span>⚠️</span></div>
-        <div class="sensor-value" id="valGas">--</div>
-        <div class="sensor-sub" id="gasStatus">측정 대기</div>
+        <div class="sensor-label">가스 안전 <span>⚠️</span></div>
+        <div class="sensor-status-main" id="gasStatus">측정 대기</div>
+        <div class="sensor-value-sub">수치: <span id="valGas">--</span></div>
       </div>
+
+      <!-- 조도 센서 -->
       <div class="sensor-card">
-        <div class="sensor-label">조도 (CdS) <span>💡</span></div>
-        <div class="sensor-value" id="valCds">--</div>
-        <div class="sensor-sub" id="cdsStatus">측정 대기</div>
+        <div class="sensor-label">주변 밝기 <span>💡</span></div>
+        <div class="sensor-status-main" id="cdsStatus">측정 대기</div>
+        <div class="sensor-value-sub">조도: <span id="valCds">--</span></div>
       </div>
     </div>
 
@@ -485,7 +481,7 @@
 
     <!-- 브라우저 안내 -->
     <div class="guide-box">
-      <div class="guide-title">ℹ️️ 접속 환경 안내</div>
+      <div class="guide-title">ℹ 접속 환경 안내</div>
       <div>• <b>Android / PC</b>: Chrome, Edge 브라우저</div>
       <div>• <b>iPhone / iPad (iOS)</b>: Bluefy 또는 WebBLE 브라우저 앱 접속</div>
     </div>
@@ -566,7 +562,7 @@
 
     function onDisconnected() {
       statusDot.classList.remove('connected');
-      statusText.innerText = "DISCONNECTED";
+      statusText.innerText = "연결 대기";
       statusText.style.color = "var(--text-sub)";
       btnConnect.style.display = "flex";
       btnDisconnect.style.display = "none";
@@ -594,7 +590,6 @@
       }
     }
 
-    // 창문 동작 버튼 이벤트 처리 및 비주얼 상태 갱신
     function sendActionCommand(cmd) {
       triggerHaptic();
       sendWindowPacket(cmd);
@@ -627,7 +622,6 @@
       }
     }
 
-    // 센서 패킷 수신 및 파싱
     function handleSensorData(event) {
       const value = event.target.value;
       for (let i = 0; i < value.byteLength; i++) {
@@ -656,34 +650,35 @@
     }
 
     function updateDashboard(temp, humi, rain, gas, cds) {
+      // 보조 수치 텍스트 업데이트
       document.getElementById('valTemp').innerText = temp;
       document.getElementById('valHumi').innerText = humi;
       document.getElementById('valRain').innerText = rain;
       document.getElementById('valGas').innerText = gas;
       document.getElementById('valCds').innerText = cds;
 
-      // 비 감지 여부
+      // 1. 강수/날씨 상태 강조
       const rainStatus = document.getElementById('rainStatus');
       if (rain < 500) {
-        rainStatus.innerText = "🌧️ 비 감지 (닫힘 권장)";
+        rainStatus.innerText = "🌧️ 비 감지됨";
         rainStatus.classList.add('alert-text');
-        sceneryIcon.innerText = "🌧️";
+        sceneryIcon.innerText = "🌧️️";
       } else {
-        rainStatus.innerText = "맑음 (미감지)";
+        rainStatus.innerText = "맑음 (비 없음)";
         rainStatus.classList.remove('alert-text');
       }
 
-      // 가스 감지 여부
+      // 2. 가스 안전 상태 강조
       const gasStatus = document.getElementById('gasStatus');
       if (gas >= 200) {
-        gasStatus.innerText = "⚠️ 가스 감지 (열림 환기)";
+        gasStatus.innerText = "⚠️ 가스 감지 (열림)";
         gasStatus.classList.add('alert-text');
       } else {
-        gasStatus.innerText = "안전 범위";
+        gasStatus.innerText = "정상 (안전)";
         gasStatus.classList.remove('alert-text');
       }
 
-      // 조도 센서 (밤/낮)
+      // 3. 밝기/주간/야간 강조
       const cdsStatus = document.getElementById('cdsStatus');
       if (cds > 500) {
         cdsStatus.innerText = "어두움 (야간)";
@@ -693,14 +688,17 @@
         if (rain >= 500) sceneryIcon.innerText = "☀️";
       }
 
-      // 온도 상태
+      // 4. 실내 공기 상태 강조
       const tempStatus = document.getElementById('tempStatus');
       if (temp >= 30) {
-        tempStatus.innerText = "더움 (열림 환기)";
+        tempStatus.innerText = "더움 (환기 필요)";
+        tempStatus.classList.add('alert-text');
       } else if (temp <= 10) {
-        tempStatus.innerText = "추움 (냉기 차단)";
+        tempStatus.innerText = "추움 (보온 필요)";
+        tempStatus.classList.remove('alert-text');
       } else {
         tempStatus.innerText = "쾌적한 실내";
+        tempStatus.classList.remove('alert-text');
       }
     }
   </script>
