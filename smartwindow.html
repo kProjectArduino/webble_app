@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Smart Air & Window Hub</title>
   
-  <!-- 프리미엄 한글 웹폰트: Pretendard -->
   <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
 
   <style>
@@ -112,7 +111,6 @@
       box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
     }
 
-    /* 연결 버튼 */
     .btn-connect {
       width: 100%;
       padding: 13px;
@@ -130,7 +128,7 @@
       gap: 8px;
       box-shadow: 0 6px 16px rgba(14, 165, 233, 0.25);
       transition: all 0.2s;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }
 
     .btn-connect:active {
@@ -149,7 +147,7 @@
     /* 그래픽 창문 뷰어 */
     .window-visualizer {
       width: 100%;
-      height: 145px;
+      height: 150px;
       background: linear-gradient(180deg, #bae6fd 0%, #e0f2fe 70%, #f0fdf4 100%);
       border-radius: 20px;
       border: 4px solid #cbd5e1;
@@ -200,12 +198,13 @@
     .window-visualizer.open .pane-left { transform: translateX(-75%); }
     .window-visualizer.open .pane-right { transform: translateX(75%); }
 
+    /* 원인 및 상태 복합 배지 */
     .window-status-pill {
       position: absolute;
       bottom: 8px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(15, 23, 42, 0.8);
+      background: rgba(15, 23, 42, 0.82);
       color: white;
       padding: 5px 14px;
       border-radius: 14px;
@@ -213,9 +212,23 @@
       font-weight: 700;
       letter-spacing: -0.2px;
       backdrop-filter: blur(4px);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
     }
 
-    /* 센서 그리드 (상태 강조 레이아웃) */
+    .cause-tag {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 1px 6px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #e0f2fe;
+    }
+
+    /* 센서 그리드 */
     .sensor-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -244,7 +257,6 @@
       align-items: center;
     }
 
-    /* 크고 굵게 강조된 상태 텍스트 */
     .sensor-status-main {
       font-size: 15px;
       font-weight: 800;
@@ -254,7 +266,6 @@
       line-height: 1.3;
     }
 
-    /* 작고 은은한 수치 텍스트 */
     .sensor-value-sub {
       font-size: 11px;
       font-weight: 500;
@@ -266,7 +277,7 @@
       color: var(--accent-red) !important;
     }
 
-    /* 모드 전환 토글 바 */
+    /* 모드 선택 바 */
     .mode-selector {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -412,38 +423,38 @@
       연결 해제
     </button>
 
-    <!-- 그래픽 창문 뷰어 -->
+    <!-- 그래픽 창문 뷰어 및 상태/원인 배지 -->
     <div id="windowBox" class="window-visualizer">
       <div id="sceneryIcon" class="scenery">☀️</div>
       <div class="window-pane pane-left"><div class="pane-grid"></div></div>
       <div class="window-pane pane-right"><div class="pane-grid"></div></div>
-      <div id="windowStateBadge" class="window-status-pill">닫힘 (대기)</div>
+      
+      <div id="windowStateBadge" class="window-status-pill">
+        <span id="causeTag" class="cause-tag">대기</span>
+        <span id="statusDesc">상태 확인 중</span>
+      </div>
     </div>
 
-    <!-- 실시간 센서 카드 그리드 (상태 중심 UI) -->
+    <!-- 실시간 센서 카드 그리드 -->
     <div class="sensor-grid">
-      <!-- 실내 환경 (온습도) -->
       <div class="sensor-card">
         <div class="sensor-label">실내 공기 <span>🌡️</span></div>
         <div class="sensor-status-main" id="tempStatus">측정 대기</div>
         <div class="sensor-value-sub"><span id="valTemp">--</span>°C / <span id="valHumi">--</span>%</div>
       </div>
 
-      <!-- 빗물 감지 -->
       <div class="sensor-card">
         <div class="sensor-label">날씨 / 강수 <span>🌧️</span></div>
         <div class="sensor-status-main" id="rainStatus">측정 대기</div>
         <div class="sensor-value-sub">센서값: <span id="valRain">--</span></div>
       </div>
 
-      <!-- 가스 감지 -->
       <div class="sensor-card">
         <div class="sensor-label">가스 안전 <span>⚠️</span></div>
         <div class="sensor-status-main" id="gasStatus">측정 대기</div>
         <div class="sensor-value-sub">수치: <span id="valGas">--</span></div>
       </div>
 
-      <!-- 조도 센서 -->
       <div class="sensor-card">
         <div class="sensor-label">주변 밝기 <span>💡</span></div>
         <div class="sensor-status-main" id="cdsStatus">측정 대기</div>
@@ -479,7 +490,6 @@
       <div id="logText" class="terminal-text">System ready. Waiting for connection...</div>
     </div>
 
-    <!-- 브라우저 안내 -->
     <div class="guide-box">
       <div class="guide-title">ℹ 접속 환경 안내</div>
       <div>• <b>Android / PC</b>: Chrome, Edge 브라우저</div>
@@ -502,11 +512,24 @@
     const logText = document.getElementById('logText');
 
     const windowBox = document.getElementById('windowBox');
-    const windowStateBadge = document.getElementById('windowStateBadge');
+    const causeTag = document.getElementById('causeTag');
+    const statusDesc = document.getElementById('statusDesc');
     const sceneryIcon = document.getElementById('sceneryIcon');
 
     const btnModeAuto = document.getElementById('btnModeAuto');
     const btnModeManual = document.getElementById('btnModeManual');
+
+    // 원인 코드별 텍스트 매핑 테이블
+    const REASON_MAP = {
+      0: { tag: "대기", text: "상태 없음", open: false },
+      1: { tag: "수동 제어", text: "수동으로 열림", open: true },
+      2: { tag: "수동 제어", text: "수동으로 닫힘", open: false },
+      3: { tag: "가스 누출", text: "가스 감지로 환기 열림", open: true },
+      4: { tag: "우천 감지", text: "빗물 유입 방지 닫힘", open: false },
+      5: { tag: "조도 센서", text: "야간 어두움으로 닫힘", open: false },
+      6: { tag: "온도 상승", text: "실내 더위로 환기 열림", open: true },
+      7: { tag: "온도 저하", text: "냉기 차단으로 닫힘", open: false }
+    };
 
     function log(msg) {
       logText.innerText = msg;
@@ -596,13 +619,12 @@
       setModeUI(false);
 
       if (cmd === '1') {
-        windowBox.classList.add('open');
-        windowStateBadge.innerText = "창문 열림";
+        updateWindowView(1);
       } else if (cmd === '2') {
-        windowBox.classList.remove('open');
-        windowStateBadge.innerText = "창문 닫힘";
+        updateWindowView(2);
       } else if (cmd === '0') {
-        windowStateBadge.innerText = "동작 정지";
+        causeTag.innerText = "수동";
+        statusDesc.innerText = "동작 정지";
       }
     }
 
@@ -622,63 +644,82 @@
       }
     }
 
+    // 창문 비주얼 및 원인 텍스트 갱신 함수
+    function updateWindowView(reasonCode) {
+      const info = REASON_MAP[reasonCode] || { tag: "알수없음", text: "상태 확인", open: false };
+      causeTag.innerText = info.tag;
+      statusDesc.innerText = info.text;
+
+      if (info.open) {
+        windowBox.classList.add('open');
+      } else {
+        windowBox.classList.remove('open');
+      }
+    }
+
+    // 센서 패킷 수신 (총 11바이트: 헤더 + 9바이트 데이터 + 테일)
     function handleSensorData(event) {
       const value = event.target.value;
       for (let i = 0; i < value.byteLength; i++) {
         rxBuffer.push(value.getUint8(i));
       }
 
-      while (rxBuffer.length >= 10) {
+      while (rxBuffer.length >= 11) {
         if (rxBuffer[0] !== 20) {
           rxBuffer.shift();
           continue;
         }
 
-        if (rxBuffer[9] === 21) {
+        if (rxBuffer[10] === 21) {
           const temp = rxBuffer[1];
           const humi = rxBuffer[2];
           const rain = rxBuffer[3] | (rxBuffer[4] << 8);
           const gas = rxBuffer[5] | (rxBuffer[6] << 8);
           const cds = rxBuffer[7] | (rxBuffer[8] << 8);
+          const reason = rxBuffer[9]; // 원인 코드 바이트
 
-          updateDashboard(temp, humi, rain, gas, cds);
-          rxBuffer.splice(0, 10);
+          updateDashboard(temp, humi, rain, gas, cds, reason);
+          rxBuffer.splice(0, 11);
         } else {
           rxBuffer.shift();
         }
       }
     }
 
-    function updateDashboard(temp, humi, rain, gas, cds) {
-      // 보조 수치 텍스트 업데이트
+    function updateDashboard(temp, humi, rain, gas, cds, reason) {
       document.getElementById('valTemp').innerText = temp;
       document.getElementById('valHumi').innerText = humi;
       document.getElementById('valRain').innerText = rain;
       document.getElementById('valGas').innerText = gas;
       document.getElementById('valCds').innerText = cds;
 
-      // 1. 강수/날씨 상태 강조
+      // 1. 창문 상태 및 개폐 원인 갱신
+      if (reason > 0) {
+        updateWindowView(reason);
+      }
+
+      // 2. 강수 센서 상태
       const rainStatus = document.getElementById('rainStatus');
       if (rain < 500) {
         rainStatus.innerText = "🌧️ 비 감지됨";
         rainStatus.classList.add('alert-text');
-        sceneryIcon.innerText = "🌧️️";
+        sceneryIcon.innerText = "🌧️";
       } else {
         rainStatus.innerText = "맑음 (비 없음)";
         rainStatus.classList.remove('alert-text');
       }
 
-      // 2. 가스 안전 상태 강조
+      // 3. 가스 센서 상태
       const gasStatus = document.getElementById('gasStatus');
       if (gas >= 200) {
-        gasStatus.innerText = "⚠️ 가스 감지 (열림)";
+        gasStatus.innerText = "⚠️ 가스 감지됨";
         gasStatus.classList.add('alert-text');
       } else {
         gasStatus.innerText = "정상 (안전)";
         gasStatus.classList.remove('alert-text');
       }
 
-      // 3. 밝기/주간/야간 강조
+      // 4. 조도 센서 상태
       const cdsStatus = document.getElementById('cdsStatus');
       if (cds > 500) {
         cdsStatus.innerText = "어두움 (야간)";
@@ -688,13 +729,13 @@
         if (rain >= 500) sceneryIcon.innerText = "☀️";
       }
 
-      // 4. 실내 공기 상태 강조
+      // 5. 온도 센서 상태
       const tempStatus = document.getElementById('tempStatus');
       if (temp >= 30) {
-        tempStatus.innerText = "더움 (환기 필요)";
+        tempStatus.innerText = "더움 (환기)";
         tempStatus.classList.add('alert-text');
       } else if (temp <= 10) {
-        tempStatus.innerText = "추움 (보온 필요)";
+        tempStatus.innerText = "추움 (보온)";
         tempStatus.classList.remove('alert-text');
       } else {
         tempStatus.innerText = "쾌적한 실내";
