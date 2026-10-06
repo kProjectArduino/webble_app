@@ -3,19 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Smart Window Controller</title>
+  <title>Smart Air & Window Hub</title>
   <style>
     :root {
-      --bg-color: #0b1329;
-      --card-bg: rgba(23, 32, 54, 0.75);
-      --accent-cyan: #06b6d4;
-      --accent-blue: #3b82f6;
+      --bg-gradient: linear-gradient(145deg, #f0f4fd 0%, #e2ebf9 100%);
+      --card-bg: rgba(255, 255, 255, 0.88);
+      --primary: #3b82f6;
+      --primary-soft: #eff6ff;
+      --primary-border: #bfdbfe;
+      --accent-sky: #0ea5e9;
       --accent-green: #10b981;
-      --accent-red: #ef4444;
+      --accent-red: #f43f5e;
       --accent-amber: #f59e0b;
-      --accent-purple: #8b5cf6;
-      --text-main: #f8fafc;
-      --text-sub: #94a3b8;
+      --text-main: #1e293b;
+      --text-sub: #64748b;
+      --text-light: #94a3b8;
+      --card-shadow: 0 16px 32px rgba(148, 163, 184, 0.2), 0 2px 6px rgba(148, 163, 184, 0.1);
     }
 
     * {
@@ -28,12 +31,9 @@
 
     body {
       margin: 0;
-      padding: 20px 16px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg-color);
-      background-image: 
-        radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.15) 0px, transparent 55%),
-        radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.12) 0px, transparent 55%);
+      padding: 24px 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: var(--bg-gradient);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -44,17 +44,17 @@
 
     .controller-card {
       background: var(--card-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 28px;
-      padding: 24px 20px;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      border-radius: 32px;
+      padding: 26px 22px;
       width: 100%;
-      max-width: 380px;
+      max-width: 390px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      box-shadow: var(--card-shadow);
     }
 
     .header {
@@ -62,7 +62,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }
 
     .title-group h1 {
@@ -70,28 +70,28 @@
       font-size: 19px;
       font-weight: 800;
       letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      color: #0f172a;
     }
 
     .title-group span {
       font-size: 11px;
-      color: var(--text-sub);
+      color: var(--primary);
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
     }
 
     .status-badge {
       display: flex;
       align-items: center;
       gap: 6px;
-      background: rgba(15, 23, 42, 0.6);
+      background: #f1f5f9;
       padding: 6px 12px;
       border-radius: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      font-size: 12px;
-      font-weight: 600;
+      border: 1px solid #e2e8f0;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-sub);
     }
 
     .dot {
@@ -99,68 +99,160 @@
       height: 8px;
       border-radius: 50%;
       background-color: var(--accent-red);
-      box-shadow: 0 0 8px var(--accent-red);
-      transition: background-color 0.3s, box-shadow 0.3s;
+      box-shadow: 0 0 6px rgba(244, 63, 94, 0.4);
+      transition: all 0.3s;
     }
 
     .dot.connected {
       background-color: var(--accent-green);
-      box-shadow: 0 0 10px var(--accent-green);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
     }
 
+    /* 연결 버튼 */
     .btn-connect {
       width: 100%;
       padding: 13px;
       border-radius: 16px;
       border: none;
-      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-cyan) 100%);
+      background: linear-gradient(135deg, #3b82f6 0%, #0284c7 100%);
       color: white;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      box-shadow: 0 6px 18px rgba(6, 182, 212, 0.25);
+      box-shadow: 0 6px 16px rgba(14, 165, 233, 0.25);
       transition: all 0.2s;
       margin-bottom: 18px;
     }
 
     .btn-connect:active {
       transform: scale(0.98);
+      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.2);
     }
 
     .btn-disconnect {
-      background: rgba(239, 68, 68, 0.15);
-      color: #fca5a5;
-      border: 1px solid rgba(239, 68, 68, 0.3);
+      background: #fee2e2;
+      color: #ef4444;
+      border: 1px solid #fecaca;
       box-shadow: none;
       display: none;
     }
 
-    /* 실시간 센서 대시보드 */
+    /* 그래픽 창문 뷰어 */
+    .window-visualizer {
+      width: 100%;
+      height: 150px;
+      background: linear-gradient(180deg, #bae6fd 0%, #e0f2fe 70%, #f0fdf4 100%);
+      border-radius: 20px;
+      border: 4px solid #cbd5e1;
+      box-shadow: inset 0 3px 10px rgba(0, 0, 0, 0.08);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      margin-bottom: 14px;
+    }
+
+    /* 바깥 풍경 (해/구름) */
+    .scenery {
+      position: absolute;
+      top: 14px;
+      right: 18px;
+      font-size: 26px;
+      filter: drop-shadow(0 2px 4px rgba(253, 224, 71, 0.5));
+      transition: all 0.5s;
+    }
+
+    /* 창문 패널 */
+    .window-pane {
+      width: 50%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(2px);
+      border: 3px solid #94a3b8;
+      position: relative;
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pane-left {
+      border-right: 2px solid #64748b;
+      transform-origin: left;
+    }
+
+    .pane-right {
+      border-left: 2px solid #64748b;
+      transform-origin: right;
+    }
+
+    /* 창살 디테일 */
+    .pane-grid {
+      position: absolute;
+      width: 100%;
+      height: 1px;
+      background: rgba(148, 163, 184, 0.6);
+    }
+
+    /* 열림/닫힘 상태별 패널 이동 */
+    .window-visualizer.open .pane-left {
+      transform: translateX(-75%);
+    }
+    .window-visualizer.open .pane-right {
+      transform: translateX(75%);
+    }
+
+    .window-visualizer.moving .window-pane {
+      animation: pulse 1s infinite alternate;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.8; }
+      100% { opacity: 0.4; }
+    }
+
+    .window-status-pill {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.75);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      backdrop-filter: blur(4px);
+    }
+
+    /* 센서 그리드 */
     .sensor-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 10px;
       width: 100%;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }
 
     .sensor-card {
-      background: rgba(15, 23, 42, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: #ffffff;
+      border: 1px solid #edf2f7;
       border-radius: 16px;
       padding: 12px;
       display: flex;
       flex-direction: column;
       gap: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
     }
 
     .sensor-label {
       font-size: 11px;
       color: var(--text-sub);
+      font-weight: 600;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -168,15 +260,15 @@
 
     .sensor-value {
       font-size: 18px;
-      font-weight: 700;
-      color: #f1f5f9;
+      font-weight: 800;
+      color: #0f172a;
       font-family: ui-monospace, Menlo, monospace;
     }
 
     .sensor-sub {
       font-size: 10.5px;
       font-weight: 600;
-      color: var(--text-sub);
+      color: var(--text-light);
     }
 
     .alert-text {
@@ -187,31 +279,30 @@
     .mode-selector {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      gap: 6px;
       width: 100%;
-      background: rgba(10, 15, 29, 0.7);
-      padding: 5px;
+      background: #e2e8f0;
+      padding: 4px;
       border-radius: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .btn-mode {
-      padding: 10px 0;
+      padding: 9px 0;
       border: none;
       border-radius: 12px;
       background: transparent;
       color: var(--text-sub);
-      font-size: 13px;
+      font-size: 12.5px;
       font-weight: 700;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .btn-mode.active {
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-      color: #ffffff;
-      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+      background: #ffffff;
+      color: var(--primary);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
     }
 
     /* 수동 동작 제어 버튼 그룹 */
@@ -220,24 +311,24 @@
       grid-template-columns: repeat(3, 1fr);
       gap: 10px;
       width: 100%;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .btn-action {
-      padding: 14px 6px;
-      background: linear-gradient(145deg, #1e293b, #0f172a);
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 12px 6px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
       border-radius: 16px;
-      color: #e2e8f0;
-      font-size: 13px;
+      color: #334155;
+      font-size: 12.5px;
       font-weight: 700;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 6px;
+      gap: 5px;
       cursor: pointer;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
       transition: all 0.15s ease;
     }
 
@@ -246,48 +337,43 @@
     }
 
     .btn-action:active {
-      transform: translateY(2px) scale(0.96);
-      background: linear-gradient(145deg, var(--accent-blue), #2563eb);
-      color: white;
+      transform: translateY(2px) scale(0.97);
+      background: var(--primary-soft);
+      border-color: var(--primary);
+      color: var(--primary);
     }
 
     .btn-action.stop-action {
-      border-color: rgba(239, 68, 68, 0.25);
-      color: #f87171;
+      color: var(--accent-red);
+      background: #fff5f5;
+      border-color: #fee2e2;
     }
 
     .btn-action.stop-action:active {
-      background: linear-gradient(145deg, var(--accent-red), #dc2626);
-      color: white;
+      background: #fecaca;
     }
 
-    /* 터미널 로그 */
+    /* 로그 바 */
     .terminal {
       width: 100%;
-      background: rgba(10, 15, 29, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
       border-radius: 12px;
-      padding: 10px 12px;
+      padding: 9px 12px;
       font-family: ui-monospace, Menlo, Consolas, monospace;
       font-size: 11px;
-      color: #38bdf8;
+      color: var(--text-sub);
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
 
     .terminal-dot {
       width: 6px;
       height: 6px;
-      background-color: #38bdf8;
+      background-color: var(--accent-sky);
       border-radius: 50%;
-      animation: blink 1.2s infinite;
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 0.3; }
-      50% { opacity: 1; }
     }
 
     .terminal-text {
@@ -298,23 +384,20 @@
 
     .guide-box {
       width: 100%;
-      padding: 12px 14px;
+      padding: 11px 13px;
       border-radius: 14px;
-      background-color: rgba(10, 15, 29, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      background-color: #f1f5f9;
+      border: 1px solid #e2e8f0;
       font-size: 11px;
-      line-height: 1.55;
+      line-height: 1.5;
       color: var(--text-sub);
     }
 
     .guide-title {
       font-weight: 700;
       color: var(--text-main);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
-
-    .highlight { color: var(--accent-cyan); font-weight: 600; }
-    .highlight-ios { color: #f472b6; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -327,18 +410,26 @@
       </div>
       <div class="status-badge">
         <div id="statusDot" class="dot"></div>
-        <span id="statusText">DISCONNECTED</span>
+        <span id="statusText">연결 대기</span>
       </div>
     </div>
 
     <!-- 기기 연결/해제 -->
     <button id="btnConnect" class="btn-connect" onclick="connectBLE()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
       창문 기기 검색 및 연결
     </button>
     <button id="btnDisconnect" class="btn-connect btn-disconnect" onclick="disconnectBLE()">
       연결 해제
     </button>
+
+    <!-- 그래픽 창문 뷰어 -->
+    <div id="windowBox" class="window-visualizer">
+      <div id="sceneryIcon" class="scenery">☀️</div>
+      <div class="window-pane pane-left"><div class="pane-grid"></div></div>
+      <div class="window-pane pane-right"><div class="pane-grid"></div></div>
+      <div id="windowStateBadge" class="window-status-pill">닫힘 (대기)</div>
+    </div>
 
     <!-- 실시간 센서 카드 그리드 -->
     <div class="sensor-grid">
@@ -348,17 +439,17 @@
         <div class="sensor-sub" id="tempStatus">측정 대기</div>
       </div>
       <div class="sensor-card">
-        <div class="sensor-label">빗물 센서 <span>🌧️</span></div>
+        <div class="sensor-label">빗물 감지 <span>🌧️</span></div>
         <div class="sensor-value" id="valRain">--</div>
         <div class="sensor-sub" id="rainStatus">측정 대기</div>
       </div>
       <div class="sensor-card">
-        <div class="sensor-label">가스 센서 <span>⚠️</span></div>
+        <div class="sensor-label">가스 감지 <span>⚠️</span></div>
         <div class="sensor-value" id="valGas">--</div>
         <div class="sensor-sub" id="gasStatus">측정 대기</div>
       </div>
       <div class="sensor-card">
-        <div class="sensor-label">조도(CdS) <span>☀️</span></div>
+        <div class="sensor-label">조도 (CdS) <span>💡</span></div>
         <div class="sensor-value" id="valCds">--</div>
         <div class="sensor-sub" id="cdsStatus">측정 대기</div>
       </div>
@@ -367,26 +458,26 @@
     <!-- 모드 선택 바 -->
     <div class="mode-selector">
       <button id="btnModeAuto" class="btn-mode" onclick="setWindowMode('3')">🤖 자동 모드</button>
-      <button id="btnModeManual" class="btn-mode active" onclick="setWindowMode('4')">🖐️️ 수동 모드</button>
+      <button id="btnModeManual" class="btn-mode active" onclick="setWindowMode('4')">🖐 수동 모드</button>
     </div>
 
     <!-- 수동 제어 버튼 -->
     <div class="manual-actions">
       <button class="btn-action" onclick="sendActionCommand('1')">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 15l-6-6-6 6"/></svg>
-        창문 열기
+        열기
       </button>
       <button class="btn-action stop-action" onclick="sendActionCommand('0')">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
         정지
       </button>
       <button class="btn-action" onclick="sendActionCommand('2')">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9l6 6 6-6"/></svg>
-        창문 닫기
+        닫기
       </button>
     </div>
 
-    <!-- 터미널 상태 바 -->
+    <!-- 로그 터미널 -->
     <div class="terminal">
       <div class="terminal-dot"></div>
       <div id="logText" class="terminal-text">System ready. Waiting for connection...</div>
@@ -394,15 +485,13 @@
 
     <!-- 브라우저 안내 -->
     <div class="guide-box">
-      <div class="guide-title">ℹ️ 접속 환경 안내</div>
-      <div>• <span class="highlight">Android/PC</span>: Chrome, Edge 브라우저</div>
-      <div>• <span class="highlight-ios">iOS</span>: App Store에서 <b>Bluefy</b> 또는 <b>WebBLE</b> 설치 후 접속</div>
-      <div style="margin-top:4px; font-size:10px; color:#64748b;">* GitHub Pages(HTTPS) 배포 환경에서 정상 작동합니다.</div>
+      <div class="guide-title">ℹ️️ 접속 환경 안내</div>
+      <div>• <b>Android / PC</b>: Chrome, Edge 브라우저</div>
+      <div>• <b>iPhone / iPad (iOS)</b>: Bluefy 또는 WebBLE 브라우저 앱 접속</div>
     </div>
   </div>
 
   <script>
-    // HC-06 / CC2541 계열 표준 16비트 Serial UUID
     const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
     const CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
 
@@ -415,6 +504,10 @@
     const btnConnect = document.getElementById('btnConnect');
     const btnDisconnect = document.getElementById('btnDisconnect');
     const logText = document.getElementById('logText');
+
+    const windowBox = document.getElementById('windowBox');
+    const windowStateBadge = document.getElementById('windowStateBadge');
+    const sceneryIcon = document.getElementById('sceneryIcon');
 
     const btnModeAuto = document.getElementById('btnModeAuto');
     const btnModeManual = document.getElementById('btnModeManual');
@@ -434,7 +527,7 @@
       }
 
       try {
-        log("BLE 창문 기기 검색 중...");
+        log("BLE 기기 검색 중...");
         bleDevice = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
           optionalServices: [SERVICE_UUID]
@@ -442,22 +535,21 @@
 
         bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
 
-        log("GATT 연결 시도...");
+        log("GATT 서버 연결 중...");
         const server = await bleDevice.gatt.connect();
         const service = await server.getPrimaryService(SERVICE_UUID);
         bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
 
-        // 아두이노 센서 데이터 패킷 구독
         await bleCharacteristic.startNotifications();
         bleCharacteristic.addEventListener('characteristicvaluechanged', handleSensorData);
 
         statusDot.classList.add('connected');
-        statusText.innerText = bleDevice.name ? bleDevice.name.toUpperCase() : "ONLINE";
+        statusText.innerText = "ONLINE";
         statusText.style.color = "var(--accent-green)";
         btnConnect.style.display = "none";
         btnDisconnect.style.display = "flex";
 
-        log(`연결 성공: ${bleDevice.name || 'Window System'}`);
+        log(`연결 완료: ${bleDevice.name || 'Window System'}`);
         triggerHaptic();
       } catch (error) {
         log(`연결 실패: ${error.message}`);
@@ -480,13 +572,12 @@
       btnDisconnect.style.display = "none";
       bleCharacteristic = null;
       rxBuffer = [];
-      log("장치 연결이 종료되었습니다.");
+      log("장치 연결이 해제되었습니다.");
     }
 
-    // 아두이노 프로토콜 패킷: [0x14, command_char]
     async function sendWindowPacket(cmdChar) {
       if (!bleCharacteristic) {
-        log("장치가 연결되지 않았습니다.");
+        log("블루투스가 연결되지 않았습니다.");
         return;
       }
 
@@ -503,14 +594,23 @@
       }
     }
 
-    // 수동 명령 ('0': 정지, '1': 열림, '2': 닫힘) -> 수동 모드로 UI 전환
+    // 창문 동작 버튼 이벤트 처리 및 비주얼 상태 갱신
     function sendActionCommand(cmd) {
       triggerHaptic();
       sendWindowPacket(cmd);
       setModeUI(false);
+
+      if (cmd === '1') {
+        windowBox.classList.add('open');
+        windowStateBadge.innerText = "창문 열림";
+      } else if (cmd === '2') {
+        windowBox.classList.remove('open');
+        windowStateBadge.innerText = "창문 닫힘";
+      } else if (cmd === '0') {
+        windowStateBadge.innerText = "동작 정지";
+      }
     }
 
-    // 모드 설정 ('3': 자동, '4': 수동)
     function setWindowMode(modeCmd) {
       triggerHaptic();
       sendWindowPacket(modeCmd);
@@ -527,7 +627,7 @@
       }
     }
 
-    // 아두이노 수신 패킷 파싱: [20, temp, humi, rainL, rainH, gasL, gasH, cdsL, cdsH, 21]
+    // 센서 패킷 수신 및 파싱
     function handleSensorData(event) {
       const value = event.target.value;
       for (let i = 0; i < value.byteLength; i++) {
@@ -562,39 +662,45 @@
       document.getElementById('valGas').innerText = gas;
       document.getElementById('valCds').innerText = cds;
 
-      // 아두이노 임계값 기준 상태 표현
+      // 비 감지 여부
       const rainStatus = document.getElementById('rainStatus');
       if (rain < 500) {
-        rainStatus.innerText = "🌧️ 비 감지됨 (닫힘)";
+        rainStatus.innerText = "🌧️ 비 감지 (닫힘 권장)";
         rainStatus.classList.add('alert-text');
+        sceneryIcon.innerText = "🌧️";
       } else {
         rainStatus.innerText = "맑음 (미감지)";
         rainStatus.classList.remove('alert-text');
       }
 
+      // 가스 감지 여부
       const gasStatus = document.getElementById('gasStatus');
       if (gas >= 200) {
-        gasStatus.innerText = "⚠️ 가스 감지 (열림)";
+        gasStatus.innerText = "⚠️ 가스 감지 (열림 환기)";
         gasStatus.classList.add('alert-text');
       } else {
         gasStatus.innerText = "안전 범위";
         gasStatus.classList.remove('alert-text');
       }
 
+      // 조도 센서 (밤/낮)
       const cdsStatus = document.getElementById('cdsStatus');
       if (cds > 500) {
-        cdsStatus.innerText = "어두움 / 야간";
+        cdsStatus.innerText = "어두움 (야간)";
+        if (rain >= 500) sceneryIcon.innerText = "🌙";
       } else {
-        cdsStatus.innerText = "주간 / 밝음";
+        cdsStatus.innerText = "밝음 (주간)";
+        if (rain >= 500) sceneryIcon.innerText = "☀️";
       }
 
+      // 온도 상태
       const tempStatus = document.getElementById('tempStatus');
       if (temp >= 30) {
-        tempStatus.innerText = "더움 (환기)";
+        tempStatus.innerText = "더움 (열림 환기)";
       } else if (temp <= 10) {
-        tempStatus.innerText = "추움 (보온)";
+        tempStatus.innerText = "추움 (냉기 차단)";
       } else {
-        tempStatus.innerText = "적정 온도";
+        tempStatus.innerText = "쾌적한 실내";
       }
     }
   </script>
