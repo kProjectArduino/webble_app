@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GPS Map & ESP32 BLE</title>
+  
+  <!-- Leaflet CSS & JS (오픈소스 지도 라이브러리) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+    #map { width: 100%; height: 100vh; }
+    .control-panel {
+      position: absolute; top: 12px; left: 12px; z-index: 1000;
+      background: rgba(255, 255, 255, 0.92); padding: 12px; border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 8px;
+    }
+    button {
+      padding: 8px 12px; font-size: 14px; font-weight: bold;
+      border: none; border-radius: 4px; background: #007bff; color: white; cursor: pointer;
+    }
+    button:active { background: #0056b3; }
+    #status { font-size: 12px; color: #333; }
+  </style>
+</head>
+<body>
+
+  <div class="control-panel">
+    <button id="btn-gps">📍 내 위치 추적 시작</button>
+    <button id="btn-ble" style="background: #28a745;">📡 ESP32 BLE 연결</button>
+    <div id="status">준비 완료</div>
+  </div>
+
+  <div id="map"></div>
+
+  <script>
+    // 1. 지도 초기화 (기본 좌표: 서울)
+    const map = L.map('map').setView([37.5665, 126.9780], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    let userMarker = null;
+    let watchId = null;
+
+    // 2. Geolocation 위치 추적 핸들러
+    document.getElementById('btn-gps').addEventListener('click', () => {
+      if (!('geolocation' in navigator)) {
+        alert('이 브라우저는 위치 정보를 지원하지 않습니다.');
+        return;
+      }
+
+      document.getElementById('status').innerText = '위치 수신 중...';
+
+      // 지속적인 위치 추적
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const accuracy = pos.coords.accuracy;
+
+          document.getElementById('status').innerText = `위도: ${lat.toFixed(5)}, 경도: ${lng.toFixed(5)} (오차: ${Math.round(accuracy)}m)`;
+
+          if (!userMarker) {
+            userMarker = L.marker([lat, lng]).addTo(map).bindPopup('현재 위치').openPopup();
+            map.setView([lat, lng], 17);
+          } else {
+            userMarker.setLatLng([lat, lng]);
+          }
+        },
+        (err) => {
+          console.error(err);
+          document.getElementById('status').innerText = `위치 오류: ${err.message}`;
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      );
+    });
+
+    // 3. Web BLE 연결 (ESP32 통신 대비)
+    let bleDevice = null;
+    let bleCharacteristic = null;
+
+    // TODO: ESP32 펌웨어에 정의된 Service UUID와 Characteristic UUID로 교체
+    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+
+    document.getElementById('btn-ble').addEventListener('click', async () => {
+      try {
+        document.getElementById('status').innerText = 'ESP32 검색 중...';
+
+        bleDevice = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true, // 특정 필터를 걸려면: filters: [{ services: [SERVICE_UUID] }]
+          optionalServices: [SERVICE_UUID]
+        });
+
+        const server = await bleDevice.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        bleCharacteristic = await service.getCharacteristic(CHAR_UUID);
+
+        document.getElementById('status').innerText = `BLE 연결됨: ${bleDevice.name || 'ESP32'}`;
+
+        // 스마트폰의 현재 위치를 ESP32로 전송하는 함수 예시
+        // sendLocationToESP32(lat, lng);
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById('status').innerText = `BLE 오류: ${err.message}`;
+      }
+    });
+
+    // ESP32로 데이터 패킷을 보낼 때 사용할 함수
+    async function sendLocationToESP32(lat, lng) {
+      if (!bleCharacteristic) return;
+      const payload = `${lat},${lng}`;
+      const encoder = new TextEncoder();
+      await bleCharacteristic.writeValue(encoder.encode(payload));
+    }
+  </script>
+</body>
+</html>
