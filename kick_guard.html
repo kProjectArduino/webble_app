@@ -69,11 +69,10 @@
   <!-- 상단 제어 패널 -->
   <div class="control-panel">
     <div class="btn-group">
-      <button id="btn-gps">📍 위치 추적 시작</button>
+      <button id="btn-ble" style="background: #28a745; flex: 1;">📡 주변 BLE 검색 & 연결</button>
       <button id="btn-clear-track" style="background: #6c757d;">궤적 리셋</button>
     </div>
-    <button id="btn-ble" style="background: #28a745;">📡 ESP32 BLE 연결</button>
-    <div id="status">준비 완료</div>
+    <div id="status">위치 초기화 중...</div>
     <div id="wake-info" class="wake-status">화면 절전 방지: 대기 중</div>
   </div>
 
@@ -123,8 +122,8 @@
     let currentLat = null;
     let currentLng = null;
     let wakeLock = null;
+    let isFirstPosition = true;
 
-    // 실시간 주행 궤적선 (두께 5px, 반투명 시안/블루 컬러)
     let pathCoordinates = [];
     const trackPolyline = L.polyline([], {
       color: '#007bff',
@@ -133,10 +132,8 @@
       smoothFactor: 1.0
     }).addTo(map);
 
-    // 미니 카드 터치 이벤트가 지도로 전파되지 않도록 방지
     L.DomEvent.disableClickPropagation(document.getElementById('miniHud'));
 
-    // 궤적 초기화 버튼
     document.getElementById('btn-clear-track').addEventListener('click', () => {
       pathCoordinates = [];
       trackPolyline.setLatLngs([]);
@@ -165,24 +162,22 @@
       }
     }
 
-    // 3. 스마트폰 위치 추적 및 Polyline 궤적 업데이트
-    document.getElementById('btn-gps').addEventListener('click', () => {
+    // 3. 페이지 로드 시 즉각 자동 위치 추적
+    function startAutoGpsTracking() {
       if (!('geolocation' in navigator)) {
-        alert('위치 정보를 지원하지 않는 브라우저입니다.');
+        document.getElementById('status').innerText = '위치 정보 미지원 브라우저';
         return;
       }
 
-      document.getElementById('status').innerText = '위치 수신 중...';
+      document.getElementById('status').innerText = '📍 위치 수신 대기 중...';
 
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
           currentLat = pos.coords.latitude;
           currentLng = pos.coords.longitude;
           const accuracy = pos.coords.accuracy;
-
           const newLatLng = [currentLat, currentLng];
 
-          // 궤적선 좌표 추가 및 지도 갱신
           pathCoordinates.push(newLatLng);
           trackPolyline.setLatLngs(pathCoordinates);
           document.getElementById('hudTrack').innerText = `누적 경로: ${pathCoordinates.length} 포인트`;
@@ -191,28 +186,34 @@
 
           if (!userMarker) {
             userMarker = L.marker(newLatLng).addTo(map).bindPopup('내 위치').openPopup();
-            map.setView(newLatLng, 17);
           } else {
             userMarker.setLatLng(newLatLng);
+          }
+
+          if (isFirstPosition) {
+            map.setView(newLatLng, 17);
+            isFirstPosition = false;
+          } else {
             map.panTo(newLatLng, { animate: true, duration: 0.5 });
           }
         },
         (err) => {
           document.getElementById('status').innerText = `위치 오류: ${err.message}`;
+          console.error(err);
         },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
       );
-    });
+    }
 
-    // 4. BLE 연결 및 텔레메트리 구독
+    // 4. 범용 BLE 스캔(acceptAllDevices) 및 연결 처리
     let bleDevice = null;
     let charGps = null;
     let charTelemetry = null;
     let sendTimer = null;
 
     const SERVICE_UUID        = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-    const CHAR_GPS_UUID       = "beb5483e-36e1-4688-b7f5-ea07361b26a8"; // 웹 -> ESP32 Write
-    const CHAR_TELEMETRY_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a9"; // ESP32 -> 웹 Notify
+    const CHAR_GPS_UUID       = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const CHAR_TELEMETRY_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a9";
 
     document.getElementById('btn-ble').addEventListener('click', async () => {
       try {
@@ -221,10 +222,11 @@
           return;
         }
 
-        document.getElementById('status').innerText = 'ESP32 검색 중...';
+        document.getElementById('status').innerText = '주변 BLE 기기 검색 중...';
 
+        // 특정 이름 필터 없이 주변의 모든 BLE 디바이스 목록 요청
         bleDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ name: 'RoadPulse_Kickboard' }],
+          acceptAllDevices: true,
           optionalServices: [SERVICE_UUID]
         });
 
@@ -239,7 +241,7 @@
         await charTelemetry.startNotifications();
         charTelemetry.addEventListener('characteristicvaluechanged', onTelemetryReceived);
 
-        document.getElementById('status').innerText = `연결됨: ${bleDevice.name}`;
+        document.getElementById('status').innerText = `연결됨: ${bleDevice.name || '알 수 없는 기기'}`;
         document.getElementById('btn-ble').style.background = '#dc3545';
         document.getElementById('btn-ble').innerText = '🔌 BLE 해제';
         
@@ -248,7 +250,6 @@
 
         await requestWakeLock();
 
-        // 1초 주기 좌표 패킷 송신 시작
         if (sendTimer) clearInterval(sendTimer);
         sendTimer = setInterval(sendLocationToESP32, 1000);
 
@@ -258,7 +259,6 @@
       }
     });
 
-    // 1초 주기 위치 데이터 전송
     async function sendLocationToESP32() {
       if (!charGps || !bleDevice || !bleDevice.gatt.connected || currentLat === null) return;
       try {
@@ -274,7 +274,6 @@
       }
     }
 
-    // ESP32 센서 데이터 수신 핸들러
     function onTelemetryReceived(event) {
       const decoder = new TextDecoder('utf-8');
       const jsonStr = decoder.decode(event.target.value);
@@ -323,7 +322,7 @@
     function onDisconnected() {
       document.getElementById('status').innerText = 'BLE 연결 해제됨';
       document.getElementById('btn-ble').style.background = '#28a745';
-      document.getElementById('btn-ble').innerText = '📡 ESP32 BLE 연결';
+      document.getElementById('btn-ble').innerText = '📡 주변 BLE 검색 & 연결';
       
       document.getElementById('hudBleDot').innerText = '● OFF';
       document.getElementById('hudBleDot').style.color = '#e53e3e';
@@ -334,6 +333,8 @@
       }
       releaseWakeLock();
     }
+
+    window.addEventListener('DOMContentLoaded', startAutoGpsTracking);
   </script>
 </body>
 </html>
