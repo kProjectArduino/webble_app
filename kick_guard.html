@@ -31,10 +31,10 @@
     /* 좌측 하단 실시간 텔레메트리 미니 HUD 카드 */
     .mini-hud {
       position: absolute; bottom: 20px; left: 12px; z-index: 1000;
-      background: rgba(18, 22, 32, 0.88); backdrop-filter: blur(6px);
+      background: rgba(18, 22, 32, 0.9); backdrop-filter: blur(6px);
       padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.15);
-      box-shadow: 0 4px 15px rgba(0,0,0,0.4); color: #fff; min-width: 175px;
-      display: flex; flex-direction: column; gap: 6px; pointer-events: auto;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4); color: #fff; min-width: 205px;
+      display: flex; flex-direction: column; gap: 5px; pointer-events: auto;
     }
     .hud-header {
       font-size: 11px; font-weight: bold; color: #a0aec0; letter-spacing: 0.5px;
@@ -55,6 +55,29 @@
     .badge-road-rough { color: #ed8936; font-size: 11px; font-weight: bold; }
 
     .hud-detail { font-size: 11px; color: #cbd5e0; }
+    
+    .hud-coords-box {
+      background: rgba(0, 0, 0, 0.28); border-radius: 6px; padding: 6px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08); margin: 2px 0;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .hud-coords { font-size: 11px; font-family: monospace; color: #00e5ff; line-height: 1.3; }
+    .hud-nav-meta {
+      font-size: 11px; font-family: monospace; color: #ffd166;
+      display: flex; justify-content: space-between; border-top: 1px dashed rgba(255, 255, 255, 0.1);
+      padding-top: 4px; margin-top: 2px;
+    }
+
+    /* 회전 가능한 내비게이션 화살표 마커 스타일 */
+    .heading-marker {
+      width: 36px; height: 36px;
+      display: flex; justify-content: center; align-items: center;
+      transition: transform 0.25s ease-out; /* 부드러운 회전 보간 */
+    }
+    .heading-arrow {
+      width: 32px; height: 32px;
+      filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
+    }
 
     /* 전복 사고 긴급 오버레이 */
     #emergencyAlert {
@@ -72,7 +95,7 @@
       <button id="btn-ble" style="background: #28a745; flex: 1;">📡 주변 BLE 검색 & 연결</button>
       <button id="btn-clear-track" style="background: #6c757d;">궤적 리셋</button>
     </div>
-    <div id="status">위치 초기화 중...</div>
+    <div id="status">위치 수신 준비 중...</div>
     <div id="wake-info" class="wake-status">화면 절전 방지: 대기 중</div>
   </div>
 
@@ -94,6 +117,16 @@
       <span id="hudLockBadge" class="hud-badge badge-lock-off">LOCKED</span>
     </div>
 
+    <!-- 실시간 GPS 좌표, 고도, 방위각 영역 -->
+    <div class="hud-coords-box">
+      <div class="hud-coords" id="hudLat">위도: 대기 중</div>
+      <div class="hud-coords" id="hudLng">경도: 대기 중</div>
+      <div class="hud-nav-meta">
+        <span id="hudAlt">고도: -- m</span>
+        <span id="hudHeading">방위: --°</span>
+      </div>
+    </div>
+
     <div class="hud-detail" id="hudTilt">기울기: 0.0°</div>
     <div class="hud-detail" id="hudRoad">노면: 포장도로</div>
     <div class="hud-detail" id="hudTrack">누적 경로: 0 포인트</div>
@@ -110,7 +143,7 @@
   </div>
 
   <script>
-    // 1. 지도 및 궤적 Polyline 초기화
+    // 1. 지도 초기화
     const map = L.map('map').setView([37.5665, 126.9780], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -121,9 +154,40 @@
     let watchId = null;
     let currentLat = null;
     let currentLng = null;
+    let currentHeading = 0;
     let wakeLock = null;
     let isFirstPosition = true;
 
+    // 회전 가능한 내비게이션 화살표 아이콘 생성기 (SVG 기반)
+    function createNavIcon(heading) {
+      const isHeadingValid = heading !== null && !isNaN(heading);
+      const angle = isHeadingValid ? Math.round(heading) : 0;
+
+      // 주행 중일 때는 방향 화살표(파란색), 정지 시에는 중앙 점 형태(초록색)
+      const svgContent = isHeadingValid ? `
+        <svg class="heading-arrow" viewBox="0 0 36 36" style="transform: rotate(${angle}deg);">
+          <!-- 외부 원 링 -->
+          <circle cx="18" cy="18" r="16" fill="rgba(0, 123, 255, 0.2)" stroke="#007bff" stroke-width="2"/>
+          <!-- 주행 방향 전면 삼각형 화살표 -->
+          <path d="M18 4 L27 27 L18 21 L9 27 Z" fill="#00e5ff" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+      ` : `
+        <svg class="heading-arrow" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="15" fill="rgba(40, 167, 69, 0.2)" stroke="#28a745" stroke-width="2"/>
+          <circle cx="18" cy="18" r="7" fill="#28a745" stroke="#ffffff" stroke-width="2"/>
+        </svg>
+      `;
+
+      return L.divIcon({
+        className: 'heading-marker',
+        html: svgContent,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -18]
+      });
+    }
+
+    // 궤적 Polyline
     let pathCoordinates = [];
     const trackPolyline = L.polyline([], {
       color: '#007bff',
@@ -139,6 +203,13 @@
       trackPolyline.setLatLngs([]);
       document.getElementById('hudTrack').innerText = '누적 경로: 0 포인트';
     });
+
+    function getDirectionText(heading) {
+      if (heading === null || isNaN(heading)) return '--';
+      const directions = ['북(N)', '북동(NE)', '동(E)', '남동(SE)', '남(S)', '남서(SW)', '서(W)', '북서(NW)'];
+      const index = Math.round(heading / 45) % 8;
+      return `${Math.round(heading)}° ${directions[index]}`;
+    }
 
     // 2. Screen Wake Lock
     async function requestWakeLock() {
@@ -162,7 +233,7 @@
       }
     }
 
-    // 3. 페이지 로드 시 즉각 자동 위치 추적
+    // 3. 페이지 접속 즉시 자동 위치 추적 및 마커 회전 갱신
     function startAutoGpsTracking() {
       if (!('geolocation' in navigator)) {
         document.getElementById('status').innerText = '위치 정보 미지원 브라우저';
@@ -176,18 +247,43 @@
           currentLat = pos.coords.latitude;
           currentLng = pos.coords.longitude;
           const accuracy = pos.coords.accuracy;
+          const altitude = pos.coords.altitude;
+          const heading = pos.coords.heading; // 0~360° 도수
+          currentHeading = heading;
+
           const newLatLng = [currentLat, currentLng];
 
           pathCoordinates.push(newLatLng);
           trackPolyline.setLatLngs(pathCoordinates);
           document.getElementById('hudTrack').innerText = `누적 경로: ${pathCoordinates.length} 포인트`;
 
-          document.getElementById('status').innerText = `위치: ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)} (±${Math.round(accuracy)}m)`;
+          document.getElementById('status').innerText = `위치 정상 수신 중 (오차: ±${Math.round(accuracy)}m)`;
+
+          document.getElementById('hudLat').innerText = `위도: ${currentLat.toFixed(6)}`;
+          document.getElementById('hudLng').innerText = `경도: ${currentLng.toFixed(6)}`;
+
+          if (altitude !== null && !isNaN(altitude)) {
+            document.getElementById('hudAlt').innerText = `고도: ${altitude.toFixed(1)}m`;
+          } else {
+            document.getElementById('hudAlt').innerText = '고도: 계산 중';
+          }
+
+          if (heading !== null && !isNaN(heading)) {
+            document.getElementById('hudHeading').innerText = `방위: ${getDirectionText(heading)}`;
+          } else {
+            document.getElementById('hudHeading').innerText = '방위: 정지/대기';
+          }
+
+          // ★ 회전 각도가 반영된 내비게이션 아이콘 생성 및 마커 업데이트
+          const navIcon = createNavIcon(heading);
 
           if (!userMarker) {
-            userMarker = L.marker(newLatLng).addTo(map).bindPopup('내 위치').openPopup();
+            userMarker = L.marker(newLatLng, { icon: navIcon }).addTo(map)
+              .bindPopup(`현재 위치<br>${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}`).openPopup();
           } else {
             userMarker.setLatLng(newLatLng);
+            userMarker.setIcon(navIcon);
+            userMarker.setPopupContent(`현재 위치<br>${currentLat.toFixed(5)}, ${currentLng.toFixed(5)}<br>방위: ${getDirectionText(heading)}`);
           }
 
           if (isFirstPosition) {
@@ -199,13 +295,14 @@
         },
         (err) => {
           document.getElementById('status').innerText = `위치 오류: ${err.message}`;
-          console.error(err);
+          document.getElementById('hudLat').innerText = `위도: 오류 발생`;
+          document.getElementById('hudLng').innerText = `경도: ${err.message}`;
         },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
       );
     }
 
-    // 4. 범용 BLE 스캔(acceptAllDevices) 및 연결 처리
+    // 4. BLE 통신 설정
     let bleDevice = null;
     let charGps = null;
     let charTelemetry = null;
@@ -224,7 +321,6 @@
 
         document.getElementById('status').innerText = '주변 BLE 기기 검색 중...';
 
-        // 특정 이름 필터 없이 주변의 모든 BLE 디바이스 목록 요청
         bleDevice = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
           optionalServices: [SERVICE_UUID]
