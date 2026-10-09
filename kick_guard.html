@@ -265,14 +265,14 @@
     let lastAppliedBearing = 0;
 
     // =================================================================
-    // 다중 위험 구역 관리 & 진입 시 1초 진동 로직
+    // 다중 위험 구역 관리 & 실시간 상태 판정
     // =================================================================
     let dangerZones = [];
     let dangerCircles = [];
     const borderOverlay = document.getElementById('dangerBorderOverlay');
     
-    // ★ 직전 상태 추적 변수 (외부 -> 내부 진입 감지용)
     let wasInsideDangerZone = false;
+    let isCurrentInsideDanger = false; // ★ ESP32로 전달할 현재 위치 위험구역 진입 여부
 
     function getDistanceMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
@@ -316,7 +316,6 @@
       }
     }
 
-    // ★ 위험구역 거리 검사 및 "외부 -> 내부" 진입 시 1초 진동 트리거
     function updateDangerZoneHUD() {
       const badge = document.getElementById('hudDangerBadge');
       const distEl = document.getElementById('hudDangerDist');
@@ -327,6 +326,7 @@
         distEl.innerText = '최단 위험거리: --';
         borderOverlay.classList.remove('active-pink');
         wasInsideDangerZone = false;
+        isCurrentInsideDanger = false;
         return;
       }
 
@@ -346,13 +346,13 @@
       });
 
       distEl.innerText = `최단 위험거리: ${Math.round(minDistance)}m`;
+      isCurrentInsideDanger = isInsideAnyZone; // ★ ESP32 전송용 상태 갱신
 
       if (isInsideAnyZone) {
         badge.innerText = `🚨 위험구역 내부! (${dangerZones.length}개 설정됨)`;
         badge.className = 'hud-badge badge-danger-zone';
         borderOverlay.classList.add('active-pink');
 
-        // ★ [핵심] 외부(false)에서 내부(true)로 진입한 최초 순간에만 1초 진동 실행
         if (!wasInsideDangerZone) {
           triggerOneSecondVibration();
           wasInsideDangerZone = true;
@@ -361,17 +361,13 @@
         badge.innerText = `위험구역: ${dangerZones.length}개 설정됨`;
         badge.className = 'hud-badge badge-safe-zone';
         borderOverlay.classList.remove('active-pink');
-        
-        // 위험구역 밖으로 완전히 벗어나면 플래그 리셋 (다시 들어올 때 진동 가능)
         wasInsideDangerZone = false;
       }
     }
 
-    // 1초(1000ms) 스마트폰 진동 실행 함수
     function triggerOneSecondVibration() {
       if ('vibrate' in navigator) {
         try {
-          // 1000ms (1초) 진동
           navigator.vibrate(1000);
           console.log("📳 위험구역 진입: 1초간 진동 작동");
         } catch (err) {
@@ -381,7 +377,20 @@
     }
 
     function addDangerZoneAtCurrentLocation() {
-      if (currentLat === null || currentLng === null) return;
+      if (currentLat === null || currentLng === null) {
+        console.warn("⚠️ GPS 좌표 수신 대기 중");
+        return;
+      }
+
+      const isTooClose = dangerZones.some(zone => {
+        const distance = getDistanceMeters(currentLat, currentLng, zone.lat, zone.lng);
+        return distance < 5.0; // 5m 이내 중복 방지
+      });
+
+      if (isTooClose) {
+        console.log("ℹ️ 5m 이내에 기존 위험구역이 있어 추가를 건너뜁니다.");
+        return;
+      }
 
       const newZone = {
         id: Date.now(),
@@ -395,6 +404,7 @@
       
       renderAllDangerCircles();
       updateDangerZoneHUD();
+      console.log(`✅ 새로운 위험구역 추가 완료! (총 ${dangerZones.length}개)`);
     }
 
     function clearAllDangerZonesSilent() {
@@ -402,6 +412,7 @@
       dangerCircles = [];
       dangerZones = [];
       wasInsideDangerZone = false;
+      isCurrentInsideDanger = false;
       localStorage.removeItem("ROAD_DANGER_ZONES");
       updateDangerZoneHUD();
     }
@@ -616,10 +627,12 @@
       }
     });
 
+    // ★ ESP32로 위험구역 유무(isCurrentInsideDanger ? 1 : 0)를 함께 전송
     async function sendLocationToESP32() {
       if (!charGps || !bleDevice || !bleDevice.gatt.connected || currentLat === null) return;
       try {
-        const payload = `${currentLat.toFixed(6)},${currentLng.toFixed(6)},${currentSpeedKmh.toFixed(1)}`;
+        const inDangerFlag = isCurrentInsideDanger ? 1 : 0;
+        const payload = `${currentLat.toFixed(6)},${currentLng.toFixed(6)},${currentSpeedKmh.toFixed(1)},${inDangerFlag}`;
         const encoder = new TextEncoder();
         if (charGps.writeValueWithoutResponse) {
           await charGps.writeValueWithoutResponse(encoder.encode(payload));
@@ -631,26 +644,35 @@
 
     function onTelemetryReceived(event) {
       const decoder = new TextDecoder('utf-8');
-      const jsonStr = decoder.decode(event.target.value);
+      const rawText = decoder.decode(event.target.value).trim();
+
+      let isDangerTriggered = false;
+      let isCrashTriggered = false;
 
       try {
-        const data = JSON.parse(jsonStr);
-        document.getElementById('hudTilt').innerText = `기울기: ${data.tilt.toFixed(1)}°`;
-
-        if (data.danger) {
-          addDangerZoneAtCurrentLocation();
+        const data = JSON.parse(rawText);
+        if (data.tilt !== undefined) {
+          document.getElementById('hudTilt').innerText = `기울기: ${data.tilt.toFixed(1)}°`;
         }
+        if (data.danger === true) isDangerTriggered = true;
+        if (data.crash === true) isCrashTriggered = true;
+      } catch (err) {
+        if (rawText === "2" || rawText.includes('"danger":true')) isDangerTriggered = true;
+        if (rawText === "1" || rawText.includes('"crash":true')) isCrashTriggered = true;
+      }
 
-        const emergencyLayer = document.getElementById('emergencyAlert');
-        if (data.crash) {
-          emergencyLayer.style.display = 'flex';
-          sendTelegramAlert(currentLat, currentLng, currentSpeedKmh);
-        } else {
-          emergencyLayer.style.display = 'none';
-          telegramSent = false;
-        }
+      if (isDangerTriggered) {
+        addDangerZoneAtCurrentLocation();
+      }
 
-      } catch (err) {}
+      const emergencyLayer = document.getElementById('emergencyAlert');
+      if (isCrashTriggered) {
+        emergencyLayer.style.display = 'flex';
+        sendTelegramAlert(currentLat, currentLng, currentSpeedKmh);
+      } else {
+        emergencyLayer.style.display = 'none';
+        telegramSent = false;
+      }
     }
 
     async function sendTelegramAlert(lat, lng, spd) {
