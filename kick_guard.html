@@ -3,11 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>GPS Map & ESP32 BLE HUD</title>
+  <title>GPS Map & ESP32 BLE HUD (Heading-Up)</title>
   
-  <!-- Leaflet CSS & JS -->
+  <!-- Leaflet Core CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Leaflet Rotate Plugin (지도 Bearing 회전 지원) -->
+  <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
 
   <style>
     body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -68,11 +71,10 @@
       padding-top: 4px; margin-top: 2px;
     }
 
-    /* 회전 가능한 내비게이션 화살표 마커 스타일 */
+    /* 내비게이션 화살표 마커 스타일 */
     .heading-marker {
       width: 36px; height: 36px;
       display: flex; justify-content: center; align-items: center;
-      transition: transform 0.25s ease-out; /* 부드러운 회전 보간 */
     }
     .heading-arrow {
       width: 32px; height: 32px;
@@ -92,7 +94,8 @@
   <!-- 상단 제어 패널 -->
   <div class="control-panel">
     <div class="btn-group">
-      <button id="btn-ble" style="background: #28a745; flex: 1;">📡 주변 BLE 검색 & 연결</button>
+      <button id="btn-ble" style="background: #28a745; flex: 1;">📡 주변 BLE 연결</button>
+      <button id="btn-toggle-rotate" style="background: #17a2b8;">🧭 내비 회전: ON</button>
       <button id="btn-clear-track" style="background: #6c757d;">궤적 리셋</button>
     </div>
     <div id="status">위치 수신 준비 중...</div>
@@ -143,8 +146,14 @@
   </div>
 
   <script>
-    // 1. 지도 초기화
-    const map = L.map('map').setView([37.5665, 126.9780], 16);
+    // 1. rotate 플러그인을 활성화한 지도 초기화
+    const map = L.map('map', {
+      rotate: true,             // 지도 회전 엔진 활성화
+      bearing: 0,              // 기본 북쪽 기준 각도
+      touchRotate: true,
+      zoomControl: false
+    }).setView([37.5665, 126.9780], 17);
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap'
@@ -154,26 +163,23 @@
     let watchId = null;
     let currentLat = null;
     let currentLng = null;
-    let currentHeading = 0;
     let wakeLock = null;
     let isFirstPosition = true;
 
-    // 회전 가능한 내비게이션 화살표 아이콘 생성기 (SVG 기반)
-    function createNavIcon(heading) {
-      const isHeadingValid = heading !== null && !isNaN(heading);
-      const angle = isHeadingValid ? Math.round(heading) : 0;
+    // 내비 회전 모드 제어 변수
+    let isHeadingUpMode = true;
+    let lastAppliedBearing = 0;
 
-      // 주행 중일 때는 방향 화살표(파란색), 정지 시에는 중앙 점 형태(초록색)
-      const svgContent = isHeadingValid ? `
-        <svg class="heading-arrow" viewBox="0 0 36 36" style="transform: rotate(${angle}deg);">
-          <!-- 외부 원 링 -->
-          <circle cx="18" cy="18" r="16" fill="rgba(0, 123, 255, 0.2)" stroke="#007bff" stroke-width="2"/>
-          <!-- 주행 방향 전면 삼각형 화살표 -->
+    // 내비게이션 화살표 아이콘 (Heading-Up 모드 시 화살표는 항상 12시 방향을 가리킴)
+    function createNavIcon(isMoving) {
+      const svgContent = isMoving ? `
+        <svg class="heading-arrow" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="16" fill="rgba(0, 123, 255, 0.25)" stroke="#007bff" stroke-width="2"/>
           <path d="M18 4 L27 27 L18 21 L9 27 Z" fill="#00e5ff" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
         </svg>
       ` : `
         <svg class="heading-arrow" viewBox="0 0 36 36">
-          <circle cx="18" cy="18" r="15" fill="rgba(40, 167, 69, 0.2)" stroke="#28a745" stroke-width="2"/>
+          <circle cx="18" cy="18" r="15" fill="rgba(40, 167, 69, 0.25)" stroke="#28a745" stroke-width="2"/>
           <circle cx="18" cy="18" r="7" fill="#28a745" stroke="#ffffff" stroke-width="2"/>
         </svg>
       `;
@@ -198,10 +204,26 @@
 
     L.DomEvent.disableClickPropagation(document.getElementById('miniHud'));
 
+    // 궤적 리셋 버튼
     document.getElementById('btn-clear-track').addEventListener('click', () => {
       pathCoordinates = [];
       trackPolyline.setLatLngs([]);
       document.getElementById('hudTrack').innerText = '누적 경로: 0 포인트';
+    });
+
+    // 지도 회전(Heading-Up vs North-Up) 토글 버튼
+    const btnToggleRotate = document.getElementById('btn-toggle-rotate');
+    btnToggleRotate.addEventListener('click', () => {
+      isHeadingUpMode = !isHeadingUpMode;
+      if (isHeadingUpMode) {
+        btnToggleRotate.innerText = '🧭 내비 회전: ON';
+        btnToggleRotate.style.background = '#17a2b8';
+      } else {
+        btnToggleRotate.innerText = '🧭 북쪽 고정: ON';
+        btnToggleRotate.style.background = '#6c757d';
+        map.setBearing(0); // 북쪽 기준으로 복귀
+        lastAppliedBearing = 0;
+      }
     });
 
     function getDirectionText(heading) {
@@ -233,7 +255,7 @@
       }
     }
 
-    // 3. 페이지 접속 즉시 자동 위치 추적 및 마커 회전 갱신
+    // 3. 페이지 접속 즉시 자동 위치 추적 및 지도 회전(Bearing) 연동
     function startAutoGpsTracking() {
       if (!('geolocation' in navigator)) {
         document.getElementById('status').innerText = '위치 정보 미지원 브라우저';
@@ -248,17 +270,17 @@
           currentLng = pos.coords.longitude;
           const accuracy = pos.coords.accuracy;
           const altitude = pos.coords.altitude;
-          const heading = pos.coords.heading; // 0~360° 도수
-          currentHeading = heading;
-
+          const heading = pos.coords.heading; // 0~360° 주행 방위각
           const newLatLng = [currentLat, currentLng];
 
+          // 궤적 누적
           pathCoordinates.push(newLatLng);
           trackPolyline.setLatLngs(pathCoordinates);
           document.getElementById('hudTrack').innerText = `누적 경로: ${pathCoordinates.length} 포인트`;
 
           document.getElementById('status').innerText = `위치 정상 수신 중 (오차: ±${Math.round(accuracy)}m)`;
 
+          // HUD 위도 / 경도 갱신
           document.getElementById('hudLat').innerText = `위도: ${currentLat.toFixed(6)}`;
           document.getElementById('hudLng').innerText = `경도: ${currentLng.toFixed(6)}`;
 
@@ -268,14 +290,26 @@
             document.getElementById('hudAlt').innerText = '고도: 계산 중';
           }
 
-          if (heading !== null && !isNaN(heading)) {
+          const isMoving = (heading !== null && !isNaN(heading));
+
+          if (isMoving) {
             document.getElementById('hudHeading').innerText = `방위: ${getDirectionText(heading)}`;
+
+            // ★ Heading-Up 모드: 이동 방향이 화면 상단(12시)을 향하도록 지도 회전각(Bearing) 설정
+            if (isHeadingUpMode) {
+              const targetBearing = heading;
+              // 미세한 떨림 방지를 위한 3도 불감대(Deadband) 필터
+              if (Math.abs(targetBearing - lastAppliedBearing) > 3) {
+                map.setBearing(targetBearing);
+                lastAppliedBearing = targetBearing;
+              }
+            }
           } else {
             document.getElementById('hudHeading').innerText = '방위: 정지/대기';
           }
 
-          // ★ 회전 각도가 반영된 내비게이션 아이콘 생성 및 마커 업데이트
-          const navIcon = createNavIcon(heading);
+          // 마커 갱신
+          const navIcon = createNavIcon(isMoving);
 
           if (!userMarker) {
             userMarker = L.marker(newLatLng, { icon: navIcon }).addTo(map)
@@ -295,14 +329,12 @@
         },
         (err) => {
           document.getElementById('status').innerText = `위치 오류: ${err.message}`;
-          document.getElementById('hudLat').innerText = `위도: 오류 발생`;
-          document.getElementById('hudLng').innerText = `경도: ${err.message}`;
         },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
       );
     }
 
-    // 4. BLE 통신 설정
+    // 4. BLE 연결 및 송수신
     let bleDevice = null;
     let charGps = null;
     let charTelemetry = null;
@@ -418,7 +450,7 @@
     function onDisconnected() {
       document.getElementById('status').innerText = 'BLE 연결 해제됨';
       document.getElementById('btn-ble').style.background = '#28a745';
-      document.getElementById('btn-ble').innerText = '📡 주변 BLE 검색 & 연결';
+      document.getElementById('btn-ble').innerText = '📡 주변 BLE 연결';
       
       document.getElementById('hudBleDot').innerText = '● OFF';
       document.getElementById('hudBleDot').style.color = '#e53e3e';
