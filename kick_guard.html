@@ -13,6 +13,28 @@
     body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #map { width: 100%; height: 100vh; }
 
+    /* ★ 위험구역 진입 시 분홍색 테두리 효과를 나타낼 오버레이 */
+    #dangerBorderOverlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; /* 지도 터치 및 클릭 방해 금지 */
+      box-sizing: border-box;
+      border: 0px solid transparent;
+      z-index: 2500;
+      transition: border 0.25s ease-in-out, box-shadow 0.25s ease-in-out;
+    }
+
+    /* 위험구역 내부일 때 활성화되는 클래스 */
+    #dangerBorderOverlay.active-pink {
+      border: 8px solid #ff1493; /* 선명한 핫핑크 테두리 */
+      box-shadow: inset 0 0 25px rgba(255, 20, 147, 0.75), 0 0 15px rgba(255, 20, 147, 0.5);
+      animation: pulsePink 1.2s infinite alternate;
+    }
+
+    @keyframes pulsePink {
+      0% { border-color: #ff1493; box-shadow: inset 0 0 15px rgba(255, 20, 147, 0.5); }
+      100% { border-color: #ff69b4; box-shadow: inset 0 0 35px rgba(255, 105, 180, 0.9); }
+    }
+
     .control-panel {
       position: absolute; top: 12px; left: 12px; z-index: 1000;
       background: rgba(255, 255, 255, 0.94); padding: 10px 14px; border-radius: 8px;
@@ -47,7 +69,7 @@
     .hud-badge {
       font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px;
     }
-    .badge-danger-zone { background: rgba(229, 62, 62, 0.35); color: #ff4d4d; border: 1px solid #e53e3e; }
+    .badge-danger-zone { background: rgba(255, 20, 147, 0.3); color: #ff69b4; border: 1px solid #ff1493; }
     .badge-safe-zone { background: rgba(56, 161, 105, 0.2); color: #a0aec0; }
 
     .hud-detail { font-size: 11px; color: #cbd5e0; }
@@ -75,7 +97,7 @@
 
     #emergencyAlert {
       display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(200, 0, 0, 0.92); z-index: 2000;
+      background: rgba(200, 0, 0, 0.92); z-index: 3000;
       flex-direction: column; justify-content: center; align-items: center; color: #fff; text-align: center;
       padding: 24px; box-sizing: border-box;
     }
@@ -83,7 +105,7 @@
 
     #configModal {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.75); z-index: 3000;
+      background: rgba(0, 0, 0, 0.75); z-index: 3500;
       justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
     }
     .config-card {
@@ -105,6 +127,9 @@
   </style>
 </head>
 <body>
+
+  <!-- 분홍색 테두리 오버레이 -->
+  <div id="dangerBorderOverlay"></div>
 
   <div class="control-panel">
     <div class="btn-group">
@@ -242,10 +267,11 @@
     let lastAppliedBearing = 0;
 
     // =================================================================
-    // 위험 구역 관리 (알림창 없이 무음 처리)
+    // 위험 구역 관리 & 분홍색 테두리 연동
     // =================================================================
     let dangerCircle = null;
     let dangerZone = null;
+    const borderOverlay = document.getElementById('dangerBorderOverlay');
 
     function getDistanceMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
@@ -265,8 +291,8 @@
         map.removeLayer(dangerCircle);
       }
       dangerCircle = L.circle([lat, lng], {
-        color: '#ff2a2a',
-        fillColor: '#ff4d4d',
+        color: '#ff1493',
+        fillColor: '#ff69b4',
         fillOpacity: 0.35,
         radius: 10,
         weight: 2
@@ -284,6 +310,7 @@
       }
     }
 
+    // ★ 위험구역 10m 내부 판정 시 분홍색 테두리 토글
     function updateDangerZoneHUD() {
       const badge = document.getElementById('hudDangerBadge');
       const distEl = document.getElementById('hudDangerDist');
@@ -292,6 +319,7 @@
         badge.innerText = '위험구역: 미설정';
         badge.className = 'hud-badge badge-safe-zone';
         distEl.innerText = '위험구역 거리: --';
+        borderOverlay.classList.remove('active-pink'); // 테두리 제거
         return;
       }
 
@@ -301,15 +329,18 @@
       distEl.innerText = `위험구역 거리: ${Math.round(dist)}m`;
 
       if (dist <= 10) {
+        // ★ 위험 구역 10m 이내: 분홍색 테두리 활성화
         badge.innerText = '🚨 위험구역 내부 (10m)';
         badge.className = 'hud-badge badge-danger-zone';
+        borderOverlay.classList.add('active-pink');
       } else {
+        // 위험 구역 외부: 분홍색 테두리 해제
         badge.innerText = '위험구역: 설정됨';
         badge.className = 'hud-badge badge-safe-zone';
+        borderOverlay.classList.remove('active-pink');
       }
     }
 
-    // ★ 알림(alert) 없이 현재 위치를 즉시 위험구역으로 저장하는 공통 함수
     function applyDangerZoneAtCurrentLocation() {
       if (currentLat === null || currentLng === null) return;
 
@@ -324,7 +355,6 @@
       updateDangerZoneHUD();
     }
 
-    // ★ 알림(confirm) 없이 즉시 해제하는 함수
     function clearDangerZoneSilent() {
       if (dangerCircle) {
         map.removeLayer(dangerCircle);
@@ -335,7 +365,6 @@
       updateDangerZoneHUD();
     }
 
-    // 버튼 클릭 시에도 알림 없이 즉시 실행
     document.getElementById('btn-set-danger').addEventListener('click', applyDangerZoneAtCurrentLocation);
     document.getElementById('btn-clear-danger').addEventListener('click', clearDangerZoneSilent);
 
@@ -455,6 +484,7 @@
             document.getElementById('hudAlt').innerText = `고도: ${altitude.toFixed(1)}m`;
           }
 
+          // 위험 구역 거리 및 분홍색 테두리 실시간 검사
           updateDangerZoneHUD();
 
           const isMoving = (heading !== null && !isNaN(heading) && currentSpeedKmh > 0.5);
@@ -541,6 +571,7 @@
         sendTimer = setInterval(sendLocationToESP32, 1000);
 
       } catch (err) {
+        console.error(err);
         document.getElementById('status').innerText = `BLE 오류: ${err.message}`;
       }
     });
@@ -558,7 +589,6 @@
       } catch (e) {}
     }
 
-    // BLE 텔레메트리 수신 처리
     function onTelemetryReceived(event) {
       const decoder = new TextDecoder('utf-8');
       const jsonStr = decoder.decode(event.target.value);
@@ -567,7 +597,7 @@
         const data = JSON.parse(jsonStr);
         document.getElementById('hudTilt').innerText = `기울기: ${data.tilt.toFixed(1)}°`;
 
-        // ★ ESP32에서 '2'를 입력하여 danger: true가 오면 무음으로 위험구역 즉시 생성
+        // ESP32에서 '2' 신호 수신 시 무음 위험구역 설정
         if (data.danger) {
           applyDangerZoneAtCurrentLocation();
         }
