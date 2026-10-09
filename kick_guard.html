@@ -72,7 +72,7 @@
       filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
     }
 
-    /* 전복 사고 긴급 오버레이 (SMS 관련 요소 제거) */
+    /* 전복 사고 긴급 오버레이 */
     #emergencyAlert {
       display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(200, 0, 0, 0.92); z-index: 2000;
@@ -80,14 +80,39 @@
       padding: 24px; box-sizing: border-box;
     }
     #telegramStatus { font-size: 14px; margin-top: 12px; color: #ffeb3b; font-weight: bold; }
+
+    /* 텔레그램 설정 모달창 스타일 */
+    #configModal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.75); z-index: 3000;
+      justify-content: center; align-items: center; padding: 20px; box-sizing: border-box;
+    }
+    .config-card {
+      background: #1a202c; color: #fff; border-radius: 12px; padding: 20px;
+      width: 100%; max-width: 360px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      border: 1px solid #2d3748;
+    }
+    .config-card h3 { font-size: 17px; margin-bottom: 8px; color: #00e5ff; }
+    .config-card p { font-size: 12px; color: #a0aec0; margin-bottom: 16px; line-height: 1.4; }
+    .config-field { margin-bottom: 12px; }
+    .config-field label { display: block; font-size: 12px; margin-bottom: 4px; color: #cbd5e0; }
+    .config-field input {
+      width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #4a5568;
+      background: #2d3748; color: #fff; font-size: 13px; box-sizing: border-box;
+    }
+    .config-field input:focus { outline: none; border-color: #00e5ff; }
+    .config-btns { display: flex; gap: 8px; margin-top: 16px; }
+    .config-btns button { flex: 1; padding: 10px; font-size: 13px; border-radius: 6px; }
   </style>
 </head>
 <body>
 
+  <!-- 상단 제어 패널 -->
   <div class="control-panel">
     <div class="btn-group">
       <button id="btn-ble" style="background: #28a745; flex: 1;">📡 주변 BLE 연결</button>
       <button id="btn-toggle-rotate" style="background: #17a2b8;">🧭 내비 회전: ON</button>
+      <button id="btn-open-config" style="background: #4a5568;">⚙️ 설정</button>
       <button id="btn-clear-track" style="background: #6c757d;">궤적 리셋</button>
     </div>
     <div id="status">위치 수신 준비 중...</div>
@@ -96,6 +121,7 @@
 
   <div id="map"></div>
 
+  <!-- 좌측 하단 미니 HUD 카드 -->
   <div class="mini-hud" id="miniHud">
     <div class="hud-header">
       <span>ROADPULSE HUD</span>
@@ -123,7 +149,7 @@
     <div class="hud-detail" id="hudTrack">누적 경로: 0 포인트</div>
   </div>
 
-  <!-- 전복 사고 긴급 모달 (텔레그램 전용) -->
+  <!-- 전복 사고 긴급 모달 -->
   <div id="emergencyAlert">
     <h2 style="font-size: 26px; margin-bottom: 8px;">🚨 전복 사고 감지!</h2>
     <p style="font-size: 14px; line-height: 1.5;">기기 전복 신호가 수신되었습니다.<br>보호자 텔레그램으로 사고 위치를 자동 전송합니다.</p>
@@ -133,13 +159,73 @@
     </button>
   </div>
 
+  <!-- 텔레그램 토큰 / ID 설정 모달 -->
+  <div id="configModal">
+    <div class="config-card">
+      <h3>⚙️ 텔레그램 SOS 알림 설정</h3>
+      <p>토큰과 ID는 브라우저 내부(스마트폰)에만 안전하게 저장되며 GitHub 소스코드에 남지 않습니다.</p>
+      
+      <div class="config-field">
+        <label for="cfgToken">텔레그램 봇 토큰 (Bot Token)</label>
+        <input type="password" id="cfgToken" placeholder="예: 8050240111:AAHyy..." />
+      </div>
+
+      <div class="config-field">
+        <label for="cfgChatId">수신자 Chat ID</label>
+        <input type="text" id="cfgChatId" placeholder="예: 6424076351" />
+      </div>
+
+      <div class="config-btns">
+        <button id="btnSaveConfig" style="background: #28a745;">저장하기</button>
+        <button id="btnCloseConfig" style="background: #6c757d;">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // =================================================================
-    // 텔레그램 봇 설정
+    // 텔레그램 토큰 및 Chat ID 관리 (localStorage 활용)
     // =================================================================
-    const TELEGRAM_BOT_TOKEN = "8050240111:AAHyyTsSc5z3gbD6l8p7XCiO00YYWE_-OzU";
-    const TELEGRAM_CHAT_ID   = "6424076351";
+    let TELEGRAM_BOT_TOKEN = localStorage.getItem("TG_BOT_TOKEN") || "";
+    let TELEGRAM_CHAT_ID   = localStorage.getItem("TG_CHAT_ID") || "";
     let telegramSent = false;
+
+    // 설정 모달 열기/닫기/저장
+    const configModal = document.getElementById('configModal');
+    const inputToken  = document.getElementById('cfgToken');
+    const inputChatId = document.getElementById('cfgChatId');
+
+    function openConfigModal() {
+      inputToken.value  = TELEGRAM_BOT_TOKEN;
+      inputChatId.value = TELEGRAM_CHAT_ID;
+      configModal.style.display = 'flex';
+    }
+
+    function closeConfigModal() {
+      configModal.style.display = 'none';
+    }
+
+    document.getElementById('btn-open-config').addEventListener('click', openConfigModal);
+    document.getElementById('btnCloseConfig').addEventListener('click', closeConfigModal);
+
+    document.getElementById('btnSaveConfig').addEventListener('click', () => {
+      const valToken  = inputToken.value.trim();
+      const valChatId = inputChatId.value.trim();
+
+      if (!valToken || !valChatId) {
+        alert("봇 토큰과 Chat ID를 모두 입력해 주세요.");
+        return;
+      }
+
+      TELEGRAM_BOT_TOKEN = valToken;
+      TELEGRAM_CHAT_ID   = valChatId;
+
+      localStorage.setItem("TG_BOT_TOKEN", TELEGRAM_BOT_TOKEN);
+      localStorage.setItem("TG_CHAT_ID", TELEGRAM_CHAT_ID);
+
+      alert("텔레그램 설정이 스마트폰에 안전하게 저장되었습니다.");
+      closeConfigModal();
+    });
 
     // 1. 지도 초기화
     const map = L.map('map', {
@@ -320,7 +406,7 @@
       );
     }
 
-    // 4. BLE 연결 및 전복 사고 수신
+    // 4. BLE 통신 설정
     let bleDevice = null;
     let charGps = null;
     let charTelemetry = null;
@@ -386,7 +472,7 @@
       } catch (e) {}
     }
 
-    // 5. ESP32 사고 신호(crash: true) 감지 및 텔레그램 전송
+    // 5. 사고 감지 및 텔레그램 전송 루틴
     function onTelemetryReceived(event) {
       const decoder = new TextDecoder('utf-8');
       const jsonStr = decoder.decode(event.target.value);
@@ -410,12 +496,18 @@
       }
     }
 
-    // 텔레그램 HTTPS API 전송 함수
     async function sendTelegramAlert(lat, lng, spd) {
       if (telegramSent) return;
-      telegramSent = true;
 
       const statusEl = document.getElementById('telegramStatus');
+
+      // 토큰 및 Chat ID 유효성 사전 검사
+      if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+        statusEl.innerText = '⚠️ 상단 [⚙️ 설정]에서 봇 토큰과 Chat ID를 먼저 등록해 주세요.';
+        return;
+      }
+
+      telegramSent = true;
       statusEl.innerText = '📡 텔레그램 SOS 발송 중...';
 
       const mapUrl = `https://maps.google.com/?q=${lat.toFixed(6)},${lng.toFixed(6)}`;
@@ -440,7 +532,7 @@
           statusEl.innerText = '✅ 텔레그램 위치 전송 완료!';
           console.log('Telegram SOS sent successfully');
         } else {
-          statusEl.innerText = '❌ 전송 실패 (API 응답 에러)';
+          statusEl.innerText = '❌ 전송 실패 (토큰 또는 Chat ID 불일치)';
         }
       } catch (err) {
         statusEl.innerText = '❌ 네트워크 전송 오류';
@@ -466,7 +558,13 @@
       releaseWakeLock();
     }
 
-    window.addEventListener('DOMContentLoaded', startAutoGpsTracking);
+    // 접속 시 설정값 없으면 설정창 자동 오픈 & GPS 추적 시작
+    window.addEventListener('DOMContentLoaded', () => {
+      startAutoGpsTracking();
+      if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+        openConfigModal();
+      }
+    });
   </script>
 </body>
 </html>
