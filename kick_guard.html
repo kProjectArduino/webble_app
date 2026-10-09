@@ -265,11 +265,14 @@
     let lastAppliedBearing = 0;
 
     // =================================================================
-    // 다중 위험 구역(Array) 관리 & 분홍색 테두리 연동
+    // 다중 위험 구역 관리 & 진입 시 1초 진동 로직
     // =================================================================
-    let dangerZones = [];    // [{ id: timestamp, lat: ..., lng: ..., radius: 10 }, ...]
-    let dangerCircles = [];  // Leaflet Circle Layer 배열
+    let dangerZones = [];
+    let dangerCircles = [];
     const borderOverlay = document.getElementById('dangerBorderOverlay');
+    
+    // ★ 직전 상태 추적 변수 (외부 -> 내부 진입 감지용)
+    let wasInsideDangerZone = false;
 
     function getDistanceMeters(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
@@ -284,13 +287,10 @@
       return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
     }
 
-    // 지도 상에 등록된 모든 위험구역 원 다시 그리기
     function renderAllDangerCircles() {
-      // 기존 원 레이어 정리
       dangerCircles.forEach(circle => map.removeLayer(circle));
       dangerCircles = [];
 
-      // 등록된 각 구역마다 원 생성
       dangerZones.forEach((zone, index) => {
         const circle = L.circle([zone.lat, zone.lng], {
           color: '#ff1493',
@@ -304,27 +304,19 @@
       });
     }
 
-    // 로컬스토리지에서 다중 위험구역 목록 불러오기
     function loadSavedDangerZones() {
       const saved = localStorage.getItem("ROAD_DANGER_ZONES");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            dangerZones = parsed;
-          } else {
-            // 과거 단일 객체 포맷 호환용
-            dangerZones = [parsed];
-          }
+          dangerZones = Array.isArray(parsed) ? parsed : [parsed];
           renderAllDangerCircles();
           updateDangerZoneHUD();
-        } catch (e) {
-          console.error("위험구역 파싱 오류:", e);
-        }
+        } catch (e) {}
       }
     }
 
-    // ★ 현재 위치와 모든 위험구역 간의 거리를 검사하여 최단거리 및 분홍색 테두리 반영
+    // ★ 위험구역 거리 검사 및 "외부 -> 내부" 진입 시 1초 진동 트리거
     function updateDangerZoneHUD() {
       const badge = document.getElementById('hudDangerBadge');
       const distEl = document.getElementById('hudDangerDist');
@@ -334,6 +326,7 @@
         badge.className = 'hud-badge badge-safe-zone';
         distEl.innerText = '최단 위험거리: --';
         borderOverlay.classList.remove('active-pink');
+        wasInsideDangerZone = false;
         return;
       }
 
@@ -342,7 +335,6 @@
       let minDistance = Infinity;
       let isInsideAnyZone = false;
 
-      // 모든 위험구역과의 거리 비교
       dangerZones.forEach(zone => {
         const dist = getDistanceMeters(currentLat, currentLng, zone.lat, zone.lng);
         if (dist < minDistance) {
@@ -358,15 +350,36 @@
       if (isInsideAnyZone) {
         badge.innerText = `🚨 위험구역 내부! (${dangerZones.length}개 설정됨)`;
         badge.className = 'hud-badge badge-danger-zone';
-        borderOverlay.classList.add('active-pink'); // 테두리 분홍색 활성화
+        borderOverlay.classList.add('active-pink');
+
+        // ★ [핵심] 외부(false)에서 내부(true)로 진입한 최초 순간에만 1초 진동 실행
+        if (!wasInsideDangerZone) {
+          triggerOneSecondVibration();
+          wasInsideDangerZone = true;
+        }
       } else {
         badge.innerText = `위험구역: ${dangerZones.length}개 설정됨`;
         badge.className = 'hud-badge badge-safe-zone';
-        borderOverlay.classList.remove('active-pink'); // 안전 구역 복귀
+        borderOverlay.classList.remove('active-pink');
+        
+        // 위험구역 밖으로 완전히 벗어나면 플래그 리셋 (다시 들어올 때 진동 가능)
+        wasInsideDangerZone = false;
       }
     }
 
-    // ★ 현재 위치를 위험구역 목록에 새로 추가 (무음/누적 저장)
+    // 1초(1000ms) 스마트폰 진동 실행 함수
+    function triggerOneSecondVibration() {
+      if ('vibrate' in navigator) {
+        try {
+          // 1000ms (1초) 진동
+          navigator.vibrate(1000);
+          console.log("📳 위험구역 진입: 1초간 진동 작동");
+        } catch (err) {
+          console.warn("진동 실행 에러:", err);
+        }
+      }
+    }
+
     function addDangerZoneAtCurrentLocation() {
       if (currentLat === null || currentLng === null) return;
 
@@ -384,11 +397,11 @@
       updateDangerZoneHUD();
     }
 
-    // ★ 모든 위험구역 초기화 (무음 처리)
     function clearAllDangerZonesSilent() {
       dangerCircles.forEach(circle => map.removeLayer(circle));
       dangerCircles = [];
       dangerZones = [];
+      wasInsideDangerZone = false;
       localStorage.removeItem("ROAD_DANGER_ZONES");
       updateDangerZoneHUD();
     }
@@ -512,7 +525,6 @@
             document.getElementById('hudAlt').innerText = `고도: ${altitude.toFixed(1)}m`;
           }
 
-          // 위험 구역 거리 및 분홍색 테두리 실시간 판정
           updateDangerZoneHUD();
 
           const isMoving = (heading !== null && !isNaN(heading) && currentSpeedKmh > 0.5);
@@ -625,7 +637,6 @@
         const data = JSON.parse(jsonStr);
         document.getElementById('hudTilt').innerText = `기울기: ${data.tilt.toFixed(1)}°`;
 
-        // ★ ESP32 '2' 명령 수신 시 위험구역 목록에 추가
         if (data.danger) {
           addDangerZoneAtCurrentLocation();
         }
@@ -697,7 +708,7 @@
 
     window.addEventListener('DOMContentLoaded', () => {
       startAutoGpsTracking();
-      loadSavedDangerZones(); // 여러 위험구역 로드
+      loadSavedDangerZones();
       if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
         openConfigModal();
       }
