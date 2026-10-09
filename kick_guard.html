@@ -18,7 +18,7 @@
       background: rgba(255, 255, 255, 0.94); padding: 10px 14px; border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 6px;
     }
-    .btn-group { display: flex; gap: 6px; }
+    .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
     button {
       padding: 8px 12px; font-size: 13px; font-weight: bold;
       border: none; border-radius: 4px; background: #007bff; color: white; cursor: pointer;
@@ -48,6 +48,8 @@
       font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px;
     }
     .badge-lock-on { background: rgba(56, 161, 105, 0.25); color: #48bb78; border: 1px solid #38a169; }
+    .badge-danger-zone { background: rgba(229, 62, 62, 0.35); color: #ff4d4d; border: 1px solid #e53e3e; }
+    .badge-safe-zone { background: rgba(56, 161, 105, 0.2); color: #a0aec0; }
 
     .hud-detail { font-size: 11px; color: #cbd5e0; }
     
@@ -107,13 +109,17 @@
 </head>
 <body>
 
-  <!-- 상단 제어 패널 -->
+  <!-- 상단 제어 패널: 위험 구역 설정 및 해지 버튼 추가 -->
   <div class="control-panel">
     <div class="btn-group">
       <button id="btn-ble" style="background: #28a745; flex: 1;">📡 주변 BLE 연결</button>
       <button id="btn-toggle-rotate" style="background: #17a2b8;">🧭 내비 회전: ON</button>
       <button id="btn-open-config" style="background: #4a5568;">⚙️ 설정</button>
       <button id="btn-clear-track" style="background: #6c757d;">궤적 리셋</button>
+    </div>
+    <div class="btn-group">
+      <button id="btn-set-danger" style="background: #d9534f; flex: 1;">⚠️ 위험구역 설정(10m)</button>
+      <button id="btn-clear-danger" style="background: #8e44ad; flex: 1;">❌ 위험구역 해지</button>
     </div>
     <div id="status">위치 수신 준비 중...</div>
     <div id="wake-info" class="wake-status">화면 절전 방지: 대기 중</div>
@@ -133,7 +139,7 @@
         <span class="hud-speed-val" id="hudSpeed">0.0</span>
         <span class="hud-speed-unit">km/h</span>
       </div>
-      <span id="hudLockBadge" class="hud-badge badge-lock-on">UNLOCKED</span>
+      <span id="hudDangerBadge" class="hud-badge badge-safe-zone">위험구역: 미설정</span>
     </div>
 
     <div class="hud-coords-box">
@@ -145,6 +151,7 @@
       </div>
     </div>
 
+    <div class="hud-detail" id="hudDangerDist">위험구역 거리: --</div>
     <div class="hud-detail" id="hudTilt">기울기: 0.0°</div>
     <div class="hud-detail" id="hudTrack">누적 경로: 0 포인트</div>
   </div>
@@ -163,7 +170,7 @@
   <div id="configModal">
     <div class="config-card">
       <h3>⚙️ 텔레그램 SOS 알림 설정</h3>
-      <p>토큰과 ID는 브라우저 내부(스마트폰)에만 안전하게 저장되며 GitHub 소스코드에 남지 않습니다.</p>
+      <p>토큰과 ID는 스마트폰 브라우저에만 저장되며 GitHub 코드에 남지 않습니다.</p>
       
       <div class="config-field">
         <label for="cfgToken">텔레그램 봇 토큰 (Bot Token)</label>
@@ -184,13 +191,12 @@
 
   <script>
     // =================================================================
-    // 텔레그램 토큰 및 Chat ID 관리 (localStorage 활용)
+    // 텔레그램 토큰 및 Chat ID 관리
     // =================================================================
     let TELEGRAM_BOT_TOKEN = localStorage.getItem("TG_BOT_TOKEN") || "";
     let TELEGRAM_CHAT_ID   = localStorage.getItem("TG_CHAT_ID") || "";
     let telegramSent = false;
 
-    // 설정 모달 열기/닫기/저장
     const configModal = document.getElementById('configModal');
     const inputToken  = document.getElementById('cfgToken');
     const inputChatId = document.getElementById('cfgChatId');
@@ -242,14 +248,130 @@
 
     let userMarker = null;
     let watchId = null;
-    let currentLat = 37.5665;
-    let currentLng = 126.9780;
+    let currentLat = null;
+    let currentLng = null;
     let currentSpeedKmh = 0.0;
     let wakeLock = null;
     let isFirstPosition = true;
 
     let isHeadingUpMode = true;
     let lastAppliedBearing = 0;
+
+    // =================================================================
+    // 위험 구역(지오펜스 반경 10m) 상태 관리 & localStorage 동기화
+    // =================================================================
+    let dangerCircle = null;
+    let dangerZone = null; // { lat: number, lng: number, radius: 10 }
+
+    // 두 좌표 간 거리 계산 함수 (Haversine 공식, 단위: 미터)
+    function getDistanceMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // 지구 반경 (m)
+      const phi1 = lat1 * Math.PI / 180;
+      const phi2 = lat2 * Math.PI / 180;
+      const deltaPhi = (lat2 - lat1) * Math.PI / 180;
+      const deltaLambda = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                Math.cos(phi1) * Math.cos(phi2) *
+                Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      return R * c;
+    }
+
+    // 지도상에 위험 구역 원 그리기
+    function renderDangerCircle(lat, lng) {
+      if (dangerCircle) {
+        map.removeLayer(dangerCircle);
+      }
+      dangerCircle = L.circle([lat, lng], {
+        color: '#ff2a2a',
+        fillColor: '#ff4d4d',
+        fillOpacity: 0.35,
+        radius: 10, // 반경 10m
+        weight: 2
+      }).addTo(map).bindPopup("⚠️ 위험 구역 (반경 10m)");
+    }
+
+    // 저장된 위험 구역 불러오기
+    function loadSavedDangerZone() {
+      const saved = localStorage.getItem("ROAD_DANGER_ZONE");
+      if (saved) {
+        try {
+          dangerZone = JSON.parse(saved);
+          renderDangerCircle(dangerZone.lat, dangerZone.lng);
+          updateDangerZoneHUD();
+        } catch (e) {
+          console.error("위험 구역 데이터 파싱 실패", e);
+        }
+      }
+    }
+
+    // 위험 구역 진입/거리 HUD 갱신
+    function updateDangerZoneHUD() {
+      const badge = document.getElementById('hudDangerBadge');
+      const distEl = document.getElementById('hudDangerDist');
+
+      if (!dangerZone) {
+        badge.innerText = '위험구역: 미설정';
+        badge.className = 'hud-badge badge-safe-zone';
+        distEl.innerText = '위험구역 거리: --';
+        return;
+      }
+
+      if (currentLat === null || currentLng === null) return;
+
+      const dist = getDistanceMeters(currentLat, currentLng, dangerZone.lat, dangerZone.lng);
+      distEl.innerText = `위험구역 거리: ${Math.round(dist)}m`;
+
+      if (dist <= 10) {
+        badge.innerText = '🚨 위험구역 내부 (주의!)';
+        badge.className = 'hud-badge badge-danger-zone';
+      } else {
+        badge.innerText = '위험구역: 외부';
+        badge.className = 'hud-badge badge-safe-zone';
+      }
+    }
+
+    // 위험 구역 설정 버튼 핸들러
+    document.getElementById('btn-set-danger').addEventListener('click', () => {
+      if (currentLat === null || currentLng === null) {
+        alert("현재 GPS 위치가 수신되지 않았습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+
+      dangerZone = {
+        lat: currentLat,
+        lng: currentLng,
+        radius: 10
+      };
+
+      // 스마트폰 로컬 저장소에 영구 보관
+      localStorage.setItem("ROAD_DANGER_ZONE", JSON.stringify(dangerZone));
+      renderDangerCircle(dangerZone.lat, dangerZone.lng);
+      updateDangerZoneHUD();
+
+      alert(`현재 위치를 기준으로 반경 10m 위험 구역이 설정되었습니다.\n(재접속 시에도 유지됩니다)`);
+    });
+
+    // 위험 구역 해지 버튼 핸들러
+    document.getElementById('btn-clear-danger').addEventListener('click', () => {
+      if (!dangerZone && !dangerCircle) {
+        alert("설정된 위험 구역이 없습니다.");
+        return;
+      }
+
+      if (confirm("설정된 위험 구역을 완전히 초기화(해지)하시겠습니까?")) {
+        if (dangerCircle) {
+          map.removeLayer(dangerCircle);
+          dangerCircle = null;
+        }
+        dangerZone = null;
+        localStorage.removeItem("ROAD_DANGER_ZONE");
+        updateDangerZoneHUD();
+        alert("위험 구역이 해지되었습니다.");
+      }
+    });
 
     function createNavIcon(isMoving) {
       const svgContent = isMoving ? `
@@ -368,6 +490,9 @@
           if (altitude !== null && !isNaN(altitude)) {
             document.getElementById('hudAlt').innerText = `고도: ${altitude.toFixed(1)}m`;
           }
+
+          // 위험 구역 거리 및 진입 여부 판정
+          updateDangerZoneHUD();
 
           const isMoving = (heading !== null && !isNaN(heading) && currentSpeedKmh > 0.5);
 
@@ -501,7 +626,6 @@
 
       const statusEl = document.getElementById('telegramStatus');
 
-      // 토큰 및 Chat ID 유효성 사전 검사
       if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
         statusEl.innerText = '⚠️ 상단 [⚙️ 설정]에서 봇 토큰과 Chat ID를 먼저 등록해 주세요.';
         return;
@@ -558,9 +682,10 @@
       releaseWakeLock();
     }
 
-    // 접속 시 설정값 없으면 설정창 자동 오픈 & GPS 추적 시작
+    // 실행 시작
     window.addEventListener('DOMContentLoaded', () => {
       startAutoGpsTracking();
+      loadSavedDangerZone(); // 스마트폰에 저장된 위험 구역 자동 복원
       if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
         openConfigModal();
       }
