@@ -47,7 +47,6 @@
     .hud-badge {
       font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px;
     }
-    .badge-lock-off { background: rgba(229, 62, 62, 0.25); color: #f56565; border: 1px solid #e53e3e; }
     .badge-lock-on { background: rgba(56, 161, 105, 0.25); color: #48bb78; border: 1px solid #38a169; }
 
     .hud-detail { font-size: 11px; color: #cbd5e0; }
@@ -73,18 +72,14 @@
       filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
     }
 
-    /* 전복 사고 긴급 오버레이 */
+    /* 전복 사고 긴급 오버레이 (SMS 관련 요소 제거) */
     #emergencyAlert {
       display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(200, 0, 0, 0.92); z-index: 2000;
       flex-direction: column; justify-content: center; align-items: center; color: #fff; text-align: center;
       padding: 24px; box-sizing: border-box;
     }
-    .sos-btn {
-      background: #fff; color: #c53030; font-size: 1.05rem; font-weight: bold;
-      padding: 12px 28px; border-radius: 50px; text-decoration: none; margin-top: 16px; display: inline-block;
-    }
-    #telegramStatus { font-size: 13px; margin-top: 10px; color: #ffeb3b; font-weight: bold; }
+    #telegramStatus { font-size: 14px; margin-top: 12px; color: #ffeb3b; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -128,14 +123,13 @@
     <div class="hud-detail" id="hudTrack">누적 경로: 0 포인트</div>
   </div>
 
-  <!-- 전복 사고 긴급 모달 (텔레그램 전송 알림 및 119 문자 버튼) -->
+  <!-- 전복 사고 긴급 모달 (텔레그램 전용) -->
   <div id="emergencyAlert">
     <h2 style="font-size: 26px; margin-bottom: 8px;">🚨 전복 사고 감지!</h2>
-    <p style="font-size: 14px; line-height: 1.4;">기기 전복 신호가 수신되었습니다.<br>보호자 텔레그램으로 위치를 자동 전송합니다.</p>
+    <p style="font-size: 14px; line-height: 1.5;">기기 전복 신호가 수신되었습니다.<br>보호자 텔레그램으로 사고 위치를 자동 전송합니다.</p>
     <div id="telegramStatus">전송 대기 중...</div>
-    <a id="btnSms" href="#" class="sos-btn">📲 119 긴급 문자 발송</a>
-    <button onclick="dismissCrashAlert()" style="background: transparent; border: 1px solid #fff; color: #fff; padding: 10px 24px; border-radius: 20px; font-weight: bold; margin-top: 14px; cursor: pointer;">
-      오작동 해제
+    <button onclick="dismissCrashAlert()" style="background: #fff; color: #c53030; border: none; padding: 12px 28px; border-radius: 25px; font-weight: bold; font-size: 14px; margin-top: 20px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+      오작동 해제 (화면 닫기)
     </button>
   </div>
 
@@ -392,33 +386,23 @@
       } catch (e) {}
     }
 
-    // ★ 5. ESP32로부터 '1' 입력에 따른 crash 신호 수신 시 텔레그램 발송
+    // 5. ESP32 사고 신호(crash: true) 감지 및 텔레그램 전송
     function onTelemetryReceived(event) {
       const decoder = new TextDecoder('utf-8');
       const jsonStr = decoder.decode(event.target.value);
 
       try {
         const data = JSON.parse(jsonStr);
-
         document.getElementById('hudTilt').innerText = `기울기: ${data.tilt.toFixed(1)}°`;
 
         const emergencyLayer = document.getElementById('emergencyAlert');
         
         if (data.crash) {
           emergencyLayer.style.display = 'flex';
-
-          // SMS 링크 자동 설정 (119 수신용)
-          const mapUrl = `https://maps.google.com/?q=${currentLat.toFixed(6)},${currentLng.toFixed(6)}`;
-          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-          const sep = isIOS ? '&' : '?';
-          const smsMsg = encodeURIComponent(`[긴급] 전동 킥보드 전복 사고 감지! 위치: ${mapUrl}`);
-          document.getElementById('btnSms').href = `sms:119${sep}body=${smsMsg}`;
-
-          // ★ 텔레그램 자동 발송 함수 호출
           sendTelegramAlert(currentLat, currentLng, currentSpeedKmh);
         } else {
           emergencyLayer.style.display = 'none';
-          telegramSent = false; // 사고 해제 시 재전송 가능하도록 리셋
+          telegramSent = false;
         }
 
       } catch (err) {
@@ -426,9 +410,9 @@
       }
     }
 
-    // ★ 텔레그램 HTTPS API 전송 함수
+    // 텔레그램 HTTPS API 전송 함수
     async function sendTelegramAlert(lat, lng, spd) {
-      if (telegramSent) return; // 중복 발송 방지
+      if (telegramSent) return;
       telegramSent = true;
 
       const statusEl = document.getElementById('telegramStatus');
