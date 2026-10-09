@@ -3,41 +3,116 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>GPS Map & ESP32 BLE</title>
+  <title>GPS Map & ESP32 BLE HUD</title>
   
-  <!-- Leaflet CSS & JS (오픈소스 지도 라이브러리) -->
+  <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
-    body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+    body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #map { width: 100%; height: 100vh; }
+
+    /* 상단 제어 패널 */
     .control-panel {
       position: absolute; top: 12px; left: 12px; z-index: 1000;
-      background: rgba(255, 255, 255, 0.92); padding: 12px; border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 8px;
+      background: rgba(255, 255, 255, 0.94); padding: 10px 14px; border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 6px;
     }
+    .btn-group { display: flex; gap: 6px; }
     button {
-      padding: 8px 12px; font-size: 14px; font-weight: bold;
+      padding: 8px 12px; font-size: 13px; font-weight: bold;
       border: none; border-radius: 4px; background: #007bff; color: white; cursor: pointer;
     }
     button:active { background: #0056b3; }
     #status { font-size: 12px; color: #333; }
+    .wake-status { font-size: 11px; color: #28a745; font-weight: bold; }
+
+    /* 좌측 하단 실시간 텔레메트리 미니 HUD 카드 */
+    .mini-hud {
+      position: absolute; bottom: 20px; left: 12px; z-index: 1000;
+      background: rgba(18, 22, 32, 0.88); backdrop-filter: blur(6px);
+      padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4); color: #fff; min-width: 175px;
+      display: flex; flex-direction: column; gap: 6px; pointer-events: auto;
+    }
+    .hud-header {
+      font-size: 11px; font-weight: bold; color: #a0aec0; letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 4px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .hud-row { display: flex; justify-content: space-between; align-items: baseline; }
+    .hud-speed-box { display: flex; align-items: baseline; gap: 3px; }
+    .hud-speed-val { font-size: 24px; font-weight: 800; color: #00e5ff; font-family: monospace; }
+    .hud-speed-unit { font-size: 11px; color: #a0aec0; }
+
+    .hud-badge {
+      font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px;
+    }
+    .badge-lock-off { background: rgba(229, 62, 62, 0.25); color: #f56565; border: 1px solid #e53e3e; }
+    .badge-lock-on { background: rgba(56, 161, 105, 0.25); color: #48bb78; border: 1px solid #38a169; }
+    .badge-road-normal { color: #cbd5e0; font-size: 11px; }
+    .badge-road-rough { color: #ed8936; font-size: 11px; font-weight: bold; }
+
+    .hud-detail { font-size: 11px; color: #cbd5e0; }
+
+    /* 전복 사고 긴급 오버레이 */
+    #emergencyAlert {
+      display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(200, 0, 0, 0.85); z-index: 2000;
+      flex-direction: column; justify-content: center; align-items: center; color: #fff; text-align: center;
+    }
   </style>
 </head>
 <body>
 
+  <!-- 상단 제어 패널 -->
   <div class="control-panel">
-    <button id="btn-gps">📍 내 위치 추적 시작</button>
+    <div class="btn-group">
+      <button id="btn-gps">📍 위치 추적 시작</button>
+      <button id="btn-clear-track" style="background: #6c757d;">궤적 리셋</button>
+    </div>
     <button id="btn-ble" style="background: #28a745;">📡 ESP32 BLE 연결</button>
     <div id="status">준비 완료</div>
+    <div id="wake-info" class="wake-status">화면 절전 방지: 대기 중</div>
   </div>
 
+  <!-- 지도 컨테이너 -->
   <div id="map"></div>
 
+  <!-- 좌측 하단 미니 HUD 카드 -->
+  <div class="mini-hud" id="miniHud">
+    <div class="hud-header">
+      <span>ROADPULSE HUD</span>
+      <span id="hudBleDot" style="color: #e53e3e; font-size: 10px;">● OFF</span>
+    </div>
+    
+    <div class="hud-row">
+      <div class="hud-speed-box">
+        <span class="hud-speed-val" id="hudSpeed">0.0</span>
+        <span class="hud-speed-unit">km/h</span>
+      </div>
+      <span id="hudLockBadge" class="hud-badge badge-lock-off">LOCKED</span>
+    </div>
+
+    <div class="hud-detail" id="hudTilt">기울기: 0.0°</div>
+    <div class="hud-detail" id="hudRoad">노면: 포장도로</div>
+    <div class="hud-detail" id="hudTrack">누적 경로: 0 포인트</div>
+    <div class="hud-detail" id="hudAlc" style="font-size: 10px; color: #a0aec0;">알코올: 대기 중</div>
+  </div>
+
+  <!-- 전복 사고 긴급 알림 레이어 -->
+  <div id="emergencyAlert">
+    <h2 style="font-size: 26px; margin-bottom: 8px;">🚨 전복 사고 감지!</h2>
+    <p style="font-size: 14px; margin-bottom: 16px;">보호자 텔레그램 SOS 위치가 발송되었습니다.</p>
+    <button onclick="dismissCrashAlert()" style="background: #fff; color: #c53030; padding: 10px 20px; border-radius: 20px; font-weight: bold;">
+      오작동 해제
+    </button>
+  </div>
+
   <script>
-    // 1. 지도 초기화 (기본 좌표: 서울)
-    const map = L.map('map').setView([37.5665, 126.9780], 15);
+    // 1. 지도 및 궤적 Polyline 초기화
+    const map = L.map('map').setView([37.5665, 126.9780], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap'
@@ -45,65 +120,137 @@
 
     let userMarker = null;
     let watchId = null;
+    let currentLat = null;
+    let currentLng = null;
+    let wakeLock = null;
 
-    // 2. Geolocation 위치 추적 핸들러
+    // 실시간 주행 궤적선 (두께 5px, 반투명 시안/블루 컬러)
+    let pathCoordinates = [];
+    const trackPolyline = L.polyline([], {
+      color: '#007bff',
+      weight: 5,
+      opacity: 0.8,
+      smoothFactor: 1.0
+    }).addTo(map);
+
+    // 미니 카드 터치 이벤트가 지도로 전파되지 않도록 방지
+    L.DomEvent.disableClickPropagation(document.getElementById('miniHud'));
+
+    // 궤적 초기화 버튼
+    document.getElementById('btn-clear-track').addEventListener('click', () => {
+      pathCoordinates = [];
+      trackPolyline.setLatLngs([]);
+      document.getElementById('hudTrack').innerText = '누적 경로: 0 포인트';
+    });
+
+    // 2. Screen Wake Lock
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          document.getElementById('wake-info').innerText = '화면 절전 방지: 활성화';
+          document.getElementById('wake-info').style.color = '#28a745';
+        } catch (err) {
+          console.warn('Wake Lock 실패:', err);
+        }
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) {
+        wakeLock.release();
+        wakeLock = null;
+        document.getElementById('wake-info').innerText = '화면 절전 방지: 해제됨';
+        document.getElementById('wake-info').style.color = '#6c757d';
+      }
+    }
+
+    // 3. 스마트폰 위치 추적 및 Polyline 궤적 업데이트
     document.getElementById('btn-gps').addEventListener('click', () => {
       if (!('geolocation' in navigator)) {
-        alert('이 브라우저는 위치 정보를 지원하지 않습니다.');
+        alert('위치 정보를 지원하지 않는 브라우저입니다.');
         return;
       }
 
       document.getElementById('status').innerText = '위치 수신 중...';
 
-      // 지속적인 위치 추적
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
+          currentLat = pos.coords.latitude;
+          currentLng = pos.coords.longitude;
           const accuracy = pos.coords.accuracy;
 
-          document.getElementById('status').innerText = `위도: ${lat.toFixed(5)}, 경도: ${lng.toFixed(5)} (오차: ${Math.round(accuracy)}m)`;
+          const newLatLng = [currentLat, currentLng];
+
+          // 궤적선 좌표 추가 및 지도 갱신
+          pathCoordinates.push(newLatLng);
+          trackPolyline.setLatLngs(pathCoordinates);
+          document.getElementById('hudTrack').innerText = `누적 경로: ${pathCoordinates.length} 포인트`;
+
+          document.getElementById('status').innerText = `위치: ${currentLat.toFixed(5)}, ${currentLng.toFixed(5)} (±${Math.round(accuracy)}m)`;
 
           if (!userMarker) {
-            userMarker = L.marker([lat, lng]).addTo(map).bindPopup('현재 위치').openPopup();
-            map.setView([lat, lng], 17);
+            userMarker = L.marker(newLatLng).addTo(map).bindPopup('내 위치').openPopup();
+            map.setView(newLatLng, 17);
           } else {
-            userMarker.setLatLng([lat, lng]);
+            userMarker.setLatLng(newLatLng);
+            map.panTo(newLatLng, { animate: true, duration: 0.5 });
           }
         },
         (err) => {
-          console.error(err);
           document.getElementById('status').innerText = `위치 오류: ${err.message}`;
         },
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
       );
     });
 
-    // 3. Web BLE 연결 (ESP32 통신 대비)
+    // 4. BLE 연결 및 텔레메트리 구독
     let bleDevice = null;
-    let bleCharacteristic = null;
+    let charGps = null;
+    let charTelemetry = null;
+    let sendTimer = null;
 
-    // TODO: ESP32 펌웨어에 정의된 Service UUID와 Characteristic UUID로 교체
-    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-    const CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+    const SERVICE_UUID        = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const CHAR_GPS_UUID       = "beb5483e-36e1-4688-b7f5-ea07361b26a8"; // 웹 -> ESP32 Write
+    const CHAR_TELEMETRY_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a9"; // ESP32 -> 웹 Notify
 
     document.getElementById('btn-ble').addEventListener('click', async () => {
       try {
+        if (bleDevice && bleDevice.gatt.connected) {
+          bleDevice.gatt.disconnect();
+          return;
+        }
+
         document.getElementById('status').innerText = 'ESP32 검색 중...';
 
         bleDevice = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true, // 특정 필터를 걸려면: filters: [{ services: [SERVICE_UUID] }]
+          filters: [{ name: 'RoadPulse_Kickboard' }],
           optionalServices: [SERVICE_UUID]
         });
 
+        bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+
         const server = await bleDevice.gatt.connect();
         const service = await server.getPrimaryService(SERVICE_UUID);
-        bleCharacteristic = await service.getCharacteristic(CHAR_UUID);
+        
+        charGps = await service.getCharacteristic(CHAR_GPS_UUID);
+        charTelemetry = await service.getCharacteristic(CHAR_TELEMETRY_UUID);
 
-        document.getElementById('status').innerText = `BLE 연결됨: ${bleDevice.name || 'ESP32'}`;
+        await charTelemetry.startNotifications();
+        charTelemetry.addEventListener('characteristicvaluechanged', onTelemetryReceived);
 
-        // 스마트폰의 현재 위치를 ESP32로 전송하는 함수 예시
-        // sendLocationToESP32(lat, lng);
+        document.getElementById('status').innerText = `연결됨: ${bleDevice.name}`;
+        document.getElementById('btn-ble').style.background = '#dc3545';
+        document.getElementById('btn-ble').innerText = '🔌 BLE 해제';
+        
+        document.getElementById('hudBleDot').innerText = '● LIVE';
+        document.getElementById('hudBleDot').style.color = '#38a169';
+
+        await requestWakeLock();
+
+        // 1초 주기 좌표 패킷 송신 시작
+        if (sendTimer) clearInterval(sendTimer);
+        sendTimer = setInterval(sendLocationToESP32, 1000);
 
       } catch (err) {
         console.error(err);
@@ -111,12 +258,81 @@
       }
     });
 
-    // ESP32로 데이터 패킷을 보낼 때 사용할 함수
-    async function sendLocationToESP32(lat, lng) {
-      if (!bleCharacteristic) return;
-      const payload = `${lat},${lng}`;
-      const encoder = new TextEncoder();
-      await bleCharacteristic.writeValue(encoder.encode(payload));
+    // 1초 주기 위치 데이터 전송
+    async function sendLocationToESP32() {
+      if (!charGps || !bleDevice || !bleDevice.gatt.connected || currentLat === null) return;
+      try {
+        const payload = `${currentLat.toFixed(6)},${currentLng.toFixed(6)}`;
+        const encoder = new TextEncoder();
+        if (charGps.writeValueWithoutResponse) {
+          await charGps.writeValueWithoutResponse(encoder.encode(payload));
+        } else {
+          await charGps.writeValue(encoder.encode(payload));
+        }
+      } catch (e) {
+        console.warn('좌표 송신 오류:', e);
+      }
+    }
+
+    // ESP32 센서 데이터 수신 핸들러
+    function onTelemetryReceived(event) {
+      const decoder = new TextDecoder('utf-8');
+      const jsonStr = decoder.decode(event.target.value);
+
+      try {
+        const data = JSON.parse(jsonStr);
+
+        document.getElementById('hudSpeed').innerText = data.spd.toFixed(1);
+        document.getElementById('hudTilt').innerText = `기울기: ${data.tilt.toFixed(1)}°`;
+
+        const lockBadge = document.getElementById('hudLockBadge');
+        if (data.lock) {
+          lockBadge.innerText = 'UNLOCKED';
+          lockBadge.className = 'hud-badge badge-lock-on';
+        } else {
+          lockBadge.innerText = (data.alc >= 350) ? '음주감지' : 'LOCKED';
+          lockBadge.className = 'hud-badge badge-lock-off';
+        }
+        document.getElementById('hudAlc').innerText = `알코올: ${data.alc} (${data.blow ? "호흡 중" : "대기"})`;
+
+        const roadEl = document.getElementById('hudRoad');
+        if (data.road) {
+          roadEl.innerText = '노면: ⚠️ 요철/비포장';
+          roadEl.className = 'hud-detail badge-road-rough';
+        } else {
+          roadEl.innerText = '노면: 정상 포장도로';
+          roadEl.className = 'hud-detail badge-road-normal';
+        }
+
+        const emergencyLayer = document.getElementById('emergencyAlert');
+        if (data.crash) {
+          emergencyLayer.style.display = 'flex';
+        } else {
+          emergencyLayer.style.display = 'none';
+        }
+
+      } catch (err) {
+        console.warn('JSON 파싱 오류:', err);
+      }
+    }
+
+    function dismissCrashAlert() {
+      document.getElementById('emergencyAlert').style.display = 'none';
+    }
+
+    function onDisconnected() {
+      document.getElementById('status').innerText = 'BLE 연결 해제됨';
+      document.getElementById('btn-ble').style.background = '#28a745';
+      document.getElementById('btn-ble').innerText = '📡 ESP32 BLE 연결';
+      
+      document.getElementById('hudBleDot').innerText = '● OFF';
+      document.getElementById('hudBleDot').style.color = '#e53e3e';
+
+      if (sendTimer) {
+        clearInterval(sendTimer);
+        sendTimer = null;
+      }
+      releaseWakeLock();
     }
   </script>
 </body>
