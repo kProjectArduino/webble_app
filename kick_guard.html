@@ -48,18 +48,71 @@
     #status { font-size: 12px; color: #333; }
     .wake-status { font-size: 11px; color: #28a745; font-weight: bold; }
 
+    /* HUD 스타일 및 토글 애니메이션 */
     .mini-hud {
       position: absolute; bottom: 20px; left: 12px; z-index: 1000;
       background: rgba(18, 22, 32, 0.9); backdrop-filter: blur(6px);
       padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.15);
       box-shadow: 0 4px 15px rgba(0,0,0,0.4); color: #fff; min-width: 220px;
       display: flex; flex-direction: column; gap: 5px; pointer-events: auto;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-origin: bottom left;
     }
+    .mini-hud.hidden {
+      opacity: 0;
+      transform: scale(0.8) translateY(20px);
+      pointer-events: none;
+    }
+
     .hud-header {
       font-size: 11px; font-weight: bold; color: #a0aec0; letter-spacing: 0.5px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 4px;
       display: flex; justify-content: space-between; align-items: center;
     }
+    .hud-header-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-close-hud {
+      background: none;
+      border: none;
+      color: #a0aec0;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+      font-weight: normal;
+    }
+    .btn-close-hud:hover {
+      color: #ff3b30;
+    }
+
+    /* HUD가 닫혔을 때 보여줄 열기 버튼 */
+    .btn-open-hud {
+      position: absolute; bottom: 20px; left: 12px; z-index: 1000;
+      background: rgba(18, 22, 32, 0.9); backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #00e5ff; font-weight: bold; font-size: 12px;
+      padding: 10px 14px; border-radius: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      display: flex; align-items: center; gap: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+      opacity: 0;
+      transform: scale(0.8);
+      pointer-events: none;
+    }
+    .btn-open-hud.visible {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: auto;
+    }
+    .btn-open-hud:hover {
+      background: rgba(0, 229, 255, 0.15);
+      border-color: #00e5ff;
+    }
+
     .hud-row { display: flex; justify-content: space-between; align-items: baseline; }
     .hud-speed-box { display: flex; align-items: baseline; gap: 3px; }
     .hud-speed-val { font-size: 26px; font-weight: 800; color: #00e5ff; font-family: monospace; }
@@ -146,10 +199,14 @@
 
   <div id="map"></div>
 
+  <!-- 닫기(접기) 버튼이 추가된 HUD -->
   <div class="mini-hud" id="miniHud">
     <div class="hud-header">
       <span>ROADPULSE HUD</span>
-      <span id="hudBleDot" style="color: #e53e3e; font-size: 10px;">● OFF</span>
+      <div class="hud-header-controls">
+        <span id="hudBleDot" style="color: #e53e3e; font-size: 10px;">● OFF</span>
+        <button class="btn-close-hud" id="btnCloseHud" title="HUD 닫기">×</button>
+      </div>
     </div>
     
     <div class="hud-row">
@@ -173,6 +230,9 @@
     <div class="hud-detail" id="hudTilt">기울기: 0.0°</div>
     <div class="hud-detail" id="hudTrack">누적 경로: 0 포인트</div>
   </div>
+
+  <!-- HUD 접혔을 때 띄울 펼치기 버튼 -->
+  <button class="btn-open-hud" id="btnOpenHud">📊 HUD 열기</button>
 
   <div id="emergencyAlert">
     <h2 style="font-size: 26px; margin-bottom: 8px;">🚨 전복 사고 감지!</h2>
@@ -263,6 +323,25 @@
 
     let isHeadingUpMode = true;
     let lastAppliedBearing = 0;
+
+    // =================================================================
+    // HUD 켜기/끄기(토글) 제어 로직 추가
+    // =================================================================
+    const miniHud = document.getElementById('miniHud');
+    const btnCloseHud = document.getElementById('btnCloseHud');
+    const btnOpenHud = document.getElementById('btnOpenHud');
+
+    // 닫기 버튼 누르면 -> HUD 숨기고, '열기' 버튼 노출
+    btnCloseHud.addEventListener('click', () => {
+      miniHud.classList.add('hidden');
+      btnOpenHud.classList.add('visible');
+    });
+
+    // 열기 버튼 누르면 -> HUD 표시하고, '열기' 버튼 숨김
+    btnOpenHud.addEventListener('click', () => {
+      miniHud.classList.remove('hidden');
+      btnOpenHud.classList.remove('visible');
+    });
 
     // =================================================================
     // 다중 위험 구역 관리 & 실시간 상태 판정
@@ -451,6 +530,7 @@
     }).addTo(map);
 
     L.DomEvent.disableClickPropagation(document.getElementById('miniHud'));
+    L.DomEvent.disableClickPropagation(document.getElementById('btnOpenHud')); // 방해 방지
 
     document.getElementById('btn-clear-track').addEventListener('click', () => {
       pathCoordinates = [];
