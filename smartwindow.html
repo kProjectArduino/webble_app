@@ -53,7 +53,7 @@
       border-radius: 32px;
       padding: 26px 22px;
       width: 100%;
-      max-width: 390px;
+      max-width: 400px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -248,6 +248,10 @@
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
     }
 
+    .sensor-card.full-width {
+      grid-column: span 2;
+    }
+
     .sensor-label {
       font-size: 11px;
       color: var(--text-sub);
@@ -308,7 +312,7 @@
       box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
     }
 
-    /* 수동 동작 버튼 */
+    /* 수동 제어 버튼 */
     .manual-actions {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -460,6 +464,13 @@
         <div class="sensor-status-main" id="cdsStatus">측정 대기</div>
         <div class="sensor-value-sub">조도: <span id="valCds">--</span></div>
       </div>
+
+      <!-- 상대 지수로 변경된 미세먼지 카드 -->
+      <div class="sensor-card full-width">
+        <div class="sensor-label">공기 중 먼지 오염도 <span>🌫️</span></div>
+        <div class="sensor-status-main" id="dustStatus">측정 대기</div>
+        <div class="sensor-value-sub">상대 지수: <span id="valDust">--</span> / 1023</div>
+      </div>
     </div>
 
     <!-- 모드 선택 바 -->
@@ -492,7 +503,7 @@
 
     <div class="guide-box">
       <div class="guide-title">ℹ 접속 환경 안내</div>
-      <div>• <b>Android / PC</b>: Chrome, Edge 브라우저</div>
+      <div>• <b>Android / PC</b>: Chrome, Edge 브라우저 (HTTPS 또는 localhost 필수)</div>
       <div>• <b>iPhone / iPad (iOS)</b>: Bluefy 또는 WebBLE 브라우저 앱 접속</div>
     </div>
   </div>
@@ -519,16 +530,18 @@
     const btnModeAuto = document.getElementById('btnModeAuto');
     const btnModeManual = document.getElementById('btnModeManual');
 
-    // 원인 코드별 텍스트 매핑 테이블
+    // 원인 코드별 텍스트 및 개폐 상태 매핑
     const REASON_MAP = {
       0: { tag: "대기", text: "상태 없음", open: false },
       1: { tag: "수동 제어", text: "수동으로 열림", open: true },
       2: { tag: "수동 제어", text: "수동으로 닫힘", open: false },
-      3: { tag: "가스 누출", text: "가스 감지로 환기 열림", open: true },
+      3: { tag: "가스 감지", text: "가스 누출로 환기 열림", open: true },
       4: { tag: "우천 감지", text: "빗물 유입 방지 닫힘", open: false },
       5: { tag: "조도 센서", text: "야간 어두움으로 닫힘", open: false },
       6: { tag: "온도 상승", text: "실내 더위로 환기 열림", open: true },
-      7: { tag: "온도 저하", text: "냉기 차단으로 닫힘", open: false }
+      7: { tag: "온도 저하", text: "냉기 차단으로 닫힘", open: false },
+      8: { tag: "안전 회피", text: "장애물 감지로 긴급 열림", open: true },
+      9: { tag: "먼지 감지", text: "먼지 농도 상승으로 닫힘", open: false }
     };
 
     function log(msg) {
@@ -644,7 +657,6 @@
       }
     }
 
-    // 창문 비주얼 및 원인 텍스트 갱신 함수
     function updateWindowView(reasonCode) {
       const info = REASON_MAP[reasonCode] || { tag: "알수없음", text: "상태 확인", open: false };
       causeTag.innerText = info.tag;
@@ -657,41 +669,43 @@
       }
     }
 
-    // 센서 패킷 수신 (총 11바이트: 헤더 + 9바이트 데이터 + 테일)
+    // 13바이트 패킷 수신 및 파싱
     function handleSensorData(event) {
       const value = event.target.value;
       for (let i = 0; i < value.byteLength; i++) {
         rxBuffer.push(value.getUint8(i));
       }
 
-      while (rxBuffer.length >= 11) {
+      while (rxBuffer.length >= 13) {
         if (rxBuffer[0] !== 20) {
           rxBuffer.shift();
           continue;
         }
 
-        if (rxBuffer[10] === 21) {
-          const temp = rxBuffer[1];
-          const humi = rxBuffer[2];
-          const rain = rxBuffer[3] | (rxBuffer[4] << 8);
-          const gas = rxBuffer[5] | (rxBuffer[6] << 8);
-          const cds = rxBuffer[7] | (rxBuffer[8] << 8);
-          const reason = rxBuffer[9]; // 원인 코드 바이트
+        if (rxBuffer[12] === 21) {
+          const temp   = rxBuffer[1];
+          const humi   = rxBuffer[2];
+          const rain   = rxBuffer[3] | (rxBuffer[4] << 8);
+          const gas    = rxBuffer[5] | (rxBuffer[6] << 8);
+          const cds    = rxBuffer[7] | (rxBuffer[8] << 8);
+          const dust   = rxBuffer[9] | (rxBuffer[10] << 8); // 상대 지수 (0~1023)
+          const reason = rxBuffer[11];
 
-          updateDashboard(temp, humi, rain, gas, cds, reason);
-          rxBuffer.splice(0, 11);
+          updateDashboard(temp, humi, rain, gas, cds, dust, reason);
+          rxBuffer.splice(0, 13);
         } else {
           rxBuffer.shift();
         }
       }
     }
 
-    function updateDashboard(temp, humi, rain, gas, cds, reason) {
+    function updateDashboard(temp, humi, rain, gas, cds, dust, reason) {
       document.getElementById('valTemp').innerText = temp;
       document.getElementById('valHumi').innerText = humi;
       document.getElementById('valRain').innerText = rain;
       document.getElementById('valGas').innerText = gas;
       document.getElementById('valCds').innerText = cds;
+      document.getElementById('valDust').innerText = dust;
 
       // 1. 창문 상태 및 개폐 원인 갱신
       if (reason > 0) {
@@ -719,7 +733,22 @@
         gasStatus.classList.remove('alert-text');
       }
 
-      // 4. 조도 센서 상태
+      // 4. 먼지 상대 지수 상태 (단위 대신 3단계 상대 지수 표기)
+      const dustStatus = document.getElementById('dustStatus');
+      if (dust >= 350) {
+        dustStatus.innerText = "🚨 먼지 유입 (차단)";
+        dustStatus.className = "sensor-status-main alert-text";
+      } else if (dust >= 230) {
+        dustStatus.innerText = "⚠️ 보통 (미세 먼지 있음)";
+        dustStatus.className = "sensor-status-main";
+        dustStatus.style.color = "var(--accent-amber)";
+      } else {
+        dustStatus.innerText = "✨ 청정 (공기 맑음)";
+        dustStatus.className = "sensor-status-main";
+        dustStatus.style.color = "var(--accent-sky)";
+      }
+
+      // 5. 조도 센서 상태
       const cdsStatus = document.getElementById('cdsStatus');
       if (cds > 500) {
         cdsStatus.innerText = "어두움 (야간)";
@@ -729,7 +758,7 @@
         if (rain >= 500) sceneryIcon.innerText = "☀️";
       }
 
-      // 5. 온도 센서 상태
+      // 6. 온도 센서 상태
       const tempStatus = document.getElementById('tempStatus');
       if (temp >= 30) {
         tempStatus.innerText = "더움 (환기)";
